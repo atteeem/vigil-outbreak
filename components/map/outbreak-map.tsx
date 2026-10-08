@@ -245,8 +245,9 @@ export function OutbreakMap({
       container: containerRef.current,
       style: buildStyle(),
       center: initialView.center,
-      zoom: initialView.zoom,
-      minZoom: 0.8,
+      // Phones see the whole world at a lower zoom.
+      zoom: initialView.zoom <= 1.5 && containerRef.current.clientWidth < 640 ? 0.3 : initialView.zoom,
+      minZoom: 0.2,
       maxZoom: 14,
       attributionControl: { compact: true },
       renderWorldCopies: true,
@@ -386,7 +387,7 @@ export function MapLegend() {
     { cls: "RESOLVED", shape: "small" },
   ];
   return (
-    <div className="pointer-events-none absolute bottom-2 left-2 z-10 rounded-md border border-line bg-panel/90 px-2.5 py-2 text-[10.5px] backdrop-blur" data-testid="map-legend">
+    <div className="pointer-events-none absolute bottom-2 left-2 z-10 rounded-md border border-line bg-panel/90 px-2 py-1.5 text-[9.5px] backdrop-blur sm:px-2.5 sm:py-2 sm:text-[10.5px]" data-testid="map-legend">
       <ul className="space-y-1">
         {items.map(({ cls, shape }) => {
           const hex = CLASSIFICATION_HEX[cls];
@@ -400,7 +401,7 @@ export function MapLegend() {
           );
         })}
       </ul>
-      <p className="mt-1.5 max-w-[200px] border-t border-line pt-1.5 leading-snug text-ink-faint">Size reflects official confirmed cases only. Halo = country-level location. No infection zones are drawn.</p>
+      <p className="mt-1.5 hidden max-w-[200px] border-t sm:block border-line pt-1.5 leading-snug text-ink-faint">Size reflects official confirmed cases only. Halo = country-level location. No infection zones are drawn.</p>
     </div>
   );
 }

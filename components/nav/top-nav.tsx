@@ -73,7 +73,8 @@ function LiveIndicator() {
   return (
     <span data-testid="live-indicator" data-state={state} title={detail} className={cn("flex items-center gap-1.5 rounded-full border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", style)}>
       <span className={cn("h-1.5 w-1.5 rounded-full bg-current", state === "live" && "animate-pulse-soft")} />
-      {label}
+      <span className="hidden sm:inline">{label}</span>
+      <span className="sr-only sm:hidden">{label}</span>
     </span>
   );
 }
@@ -217,7 +218,7 @@ export function TopNav() {
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur-md">
-      <div className="mx-auto flex h-12 max-w-[1920px] items-center gap-3 px-3 sm:px-4">
+      <div className="mx-auto flex h-12 max-w-[1920px] items-center gap-2 px-2 sm:gap-3 sm:px-4">
         <button className="rounded-md p-1.5 text-ink-dim hover:bg-hover lg:hidden" aria-label="Menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)} data-testid="mobile-menu-button">
           {menuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
@@ -227,7 +228,7 @@ export function TopNav() {
             <circle cx="10" cy="10" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
             <circle cx="10" cy="10" r="1.6" fill="currentColor" />
           </svg>
-          <span className="text-[13px] font-semibold tracking-[0.18em]">VIGIL <span className="text-accent">OUTBREAK</span></span>
+          <span className="whitespace-nowrap text-[12px] font-semibold tracking-[0.1em] sm:text-[13px] sm:tracking-[0.18em]">VIGIL <span className="text-accent">OUTBREAK</span></span>
         </Link>
         <nav className="ml-4 hidden items-center gap-0.5 lg:flex" aria-label="Primary">
           {LINKS.map((l) => (
@@ -236,7 +237,7 @@ export function TopNav() {
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
           <LiveIndicator />
           <button onClick={() => setSearchOpen(true)} aria-label="Search" className="flex items-center gap-2 rounded-md p-2 text-ink-dim hover:bg-hover hover:text-ink sm:border sm:border-line sm:px-2.5 sm:py-1.5" data-testid="search-button">
             <Search className="h-4 w-4" />

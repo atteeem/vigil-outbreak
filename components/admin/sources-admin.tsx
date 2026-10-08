@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Download, PlayCircle, Plug } from "lucide-react";
 import { useAction, Flash } from "./use-action";
-import { fmtUtc, relative, cn } from "@/lib/utils";
+import { fmtUtc, cn } from "@/lib/utils";
+import { Ago } from "@/components/ui/time";
 
 interface Run { status: string; startedAt: string; itemsNew: number; itemsDuplicate: number; errorMessage: string | null }
 interface Source { id: string; slug: string; name: string; organization: string; kind: string; adapter: string; url: string | null; homepage: string | null; enabled: boolean; pollIntervalMinutes: number; lastFetchAt: string | null; lastSuccessAt: string | null; lastError: string | null; consecutiveFailures: number; endpointStatus: string; notes: string | null; runs: Run[]; _count: { articles: number } }
@@ -23,7 +24,7 @@ function SourceRow({ s }: { s: Source }) {
           <p className="text-[13px] font-medium">{s.name} <span className="ml-1 text-[10px] uppercase tracking-wide text-ink-faint">{s.kind} · {s.adapter}</span></p>
           <p className="text-[11px] text-ink-faint">
             {manual ? "Provenance-only source (not polled)" : <>{s.enabled ? <span className="text-ok">enabled</span> : "disabled"} · every {s.pollIntervalMinutes} min · endpoint <span className={status}>{s.endpointStatus.toLowerCase()}</span></>}
-            {" · "}{s._count.articles} articles · last fetch {s.lastFetchAt ? <span title={fmtUtc(s.lastFetchAt)}>{relative(s.lastFetchAt)}</span> : "never"} · last success {s.lastSuccessAt ? relative(s.lastSuccessAt) : "never"}
+            {" · "}{s._count.articles} articles · last fetch {s.lastFetchAt ? <Ago iso={s.lastFetchAt} /> : "never"} · last success <Ago iso={s.lastSuccessAt} />
           </p>
           {s.lastError && <p className="text-[11px] text-danger" data-testid="source-last-error">Last error: {s.lastError}</p>}
           {s.notes && <p className="text-[11px] text-ink-dim">{s.notes}</p>}
@@ -58,7 +59,7 @@ export function SourcesAdmin({ sources, pending, scheduler }: { sources: Source[
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold">Sources & ingestion</h1>
-          <p className="text-xs text-ink-dim">Scheduler: <span className={cn(scheduler.running ? "text-ok" : "text-warn")}>{scheduler.running ? `running (since ${fmtUtc(scheduler.startedAt)}${scheduler.lastTickAt ? `, last tick ${relative(scheduler.lastTickAt)}` : ""})` : "not running in this process"}</span> · <Link href="/admin/review" className="text-accent">{pending} articles awaiting review</Link></p>
+          <p className="text-xs text-ink-dim">Scheduler: <span className={cn(scheduler.running ? "text-ok" : "text-warn")}>{scheduler.running ? <>running since {fmtUtc(scheduler.startedAt)}{scheduler.lastTickAt ? <>, last tick <Ago iso={scheduler.lastTickAt} /></> : null}</> : "not running in this process"}</span> · <Link href="/admin/review" className="text-accent">{pending} articles awaiting review</Link></p>
         </div>
         <button className="btn btn-accent" disabled={!!busy} data-testid="fetch-all" onClick={async () => { const d = await run<{ results: RunResult[] }>("all", "/api/admin/ingest", "POST", undefined, (d) => `Fetched ${d.results.length} sources.`); if (d) setResults(d.results); }}>
           <PlayCircle className="h-3.5 w-3.5" />{busy === "all" ? "Fetching all sources…" : "Fetch Now (all enabled)"}

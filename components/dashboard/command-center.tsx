@@ -128,6 +128,8 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
   const markers = useMemo(() => markersFor(data.outbreaks), [data.outbreaks]);
   const activeFilterCount = (filters.disease ? 1 : 0) + (filters.country ? 1 : 0) + (filters.status.length ? 1 : 0) + (filters.since ? 1 : 0) + (filters.q ? 1 : 0);
   const k = data.kpis;
+  // Relative times are computed against the server's generation time so SSR and hydration render identical text.
+  const refNow = Date.parse(data.generatedAt);
   const diseaseOptions = data.diseases;
 
   const filterPanel = (
@@ -197,7 +199,7 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
                 </p>
                 <p className="mt-0.5 text-[10.5px] text-ink-faint">
                   {o.cases.confirmedCases !== null ? <span className="num text-ink-dim">{formatCount(o.cases.confirmedCases)} confirmed · </span> : null}
-                  updated {relative(o.lastActivityAt, asOf?.getTime())}
+                  updated {relative(o.lastActivityAt, asOf?.getTime() ?? refNow)}
                 </p>
               </div>
             </div>
@@ -292,13 +294,13 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
           <Kpi label="Confirmed active outbreaks" value={String(k.confirmedActive)} sub="localized + widespread" testId="kpi-confirmed" />
           <Kpi label="New reports (24h)" value={String(k.newReports24h)} sub="by publication time" testId="kpi-new-reports" />
           <Kpi label="Countries with activity" value={String(k.countriesWithActivity)} sub="excludes resolved" testId="kpi-countries" />
-          <Kpi label="Last successful refresh" value={k.lastSuccessfulRefresh ? relative(k.lastSuccessfulRefresh) : "No successful fetch yet"} sub={k.lastAttempt ? `last attempt ${relative(k.lastAttempt)}` : "automatic sources have not run"} testId="kpi-refresh" tone={k.lastSuccessfulRefresh ? undefined : "dim"} />
+          <Kpi label="Last successful refresh" value={k.lastSuccessfulRefresh ? relative(k.lastSuccessfulRefresh, refNow) : "No successful fetch yet"} sub={k.lastAttempt ? `last attempt ${relative(k.lastAttempt, refNow)}` : "automatic sources have not run"} testId="kpi-refresh" tone={k.lastSuccessfulRefresh ? undefined : "dim"} />
         </section>
       )}
 
-      <div className={cn("grid gap-2", "lg:grid-cols-[300px_minmax(0,1fr)_340px]", variant === "overview" && "lg:h-[calc(100vh-17.5rem)] lg:min-h-[560px]")}>
+      <div className={cn("grid grid-cols-1 gap-2", "lg:grid-cols-[300px_minmax(0,1fr)_340px]", variant === "overview" && "lg:h-[calc(100vh-17.5rem)] lg:min-h-[560px]")}>
         {/* Left */}
-        <aside className="order-2 flex min-h-0 flex-col gap-2 lg:order-1 lg:overflow-y-auto">
+        <aside className="order-2 flex min-h-0 min-w-0 flex-col gap-2 lg:order-1 lg:overflow-y-auto">
           <div className="panel">
             <button className="panel-head w-full lg:cursor-default" onClick={() => setFiltersOpen((v) => !v)} aria-expanded={filtersOpen}>
               <span className="eyebrow flex items-center gap-1.5"><Filter className="h-3 w-3" /> Filters{activeFilterCount ? <span className="text-accent">({activeFilterCount})</span> : null}</span>
@@ -319,8 +321,8 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
         </aside>
 
         {/* Center */}
-        <section className="order-1 flex min-h-0 flex-col gap-2 lg:order-2">
-          <div className={cn("panel relative min-h-0 flex-1 overflow-hidden", mapHeight)}>
+        <section className="order-1 flex min-h-0 min-w-0 flex-col gap-2 lg:order-2">
+          <div className={cn("panel relative min-h-0 flex-none overflow-hidden lg:flex-1", mapHeight)}>
             <OutbreakMap markers={markers} selectedSlug={selected} onSelect={(s) => select(s)} focus={focus} className="absolute inset-0" />
             {loading && <span className="absolute right-12 top-2 z-10 rounded bg-panel/90 px-2 py-1 text-[10px] text-ink-dim">Updating…</span>}
           </div>
@@ -328,14 +330,14 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
         </section>
 
         {/* Right */}
-        <aside className="panel order-3 min-h-0 overflow-y-auto lg:max-h-full" aria-label="Selected event details">
+        <aside className="panel order-3 min-h-0 min-w-0 overflow-y-auto lg:max-h-full" aria-label="Selected event details">
           <div className="panel-head"><span className="eyebrow">Selected event</span>{selected && <button className="text-[10px] text-ink-faint hover:text-ink" onClick={() => setSelected(null)}>Clear</button>}</div>
           <DetailPanel detail={selected ? detail : null} loading={!!selected && loadedKey !== `${selected}|${asOfIso}`} asOf={asOfIso} />
         </aside>
       </div>
 
       {variant === "overview" && (
-        <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_420px]">
           <div className="panel flex max-h-96 min-h-0 flex-col">
             <div className="panel-head"><span className="eyebrow">Intelligence feed</span><Link href="/intelligence" className="text-[11px] text-ink-dim hover:text-accent">All reports →</Link></div>
             <div className="min-h-0 overflow-y-auto">{feed}</div>
