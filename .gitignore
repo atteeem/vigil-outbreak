@@ -1,0 +1,14 @@
+node_modules
+.next
+.next-test
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.local
+test-results
+playwright-report
+next-env.d.ts
+*.tsbuildinfo
+lib/generated

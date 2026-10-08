@@ -1,0 +1,329 @@
+// VIGIL OUTBREAK — database schema.
+//
+// Principles (see README "Data integrity"):
+// - History is append-only where it matters: case counts are dated OutbreakObservation rows, classification
+//   changes are InvestigationStatusHistory rows. Nothing overwrites an earlier reported value.
+// - Unknown is not zero: every count is nullable; null means "not reported".
+// - Every claim keeps its provenance (source article, official vs media, verification status).
+// - Two clocks: `reportedAt`/`publishedAt` = when information became public (drives historical playback);
+//   `asOfDate`/`occurredAt`/`eventDate` = when the underlying thing happened.
+//
+// SQLite has no enum type, so enum-shaped fields are Strings validated at the TypeScript boundary
+// (lib/domain/enums.ts). Switching `provider` to "postgresql" works without model changes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Disease {
+  id           String     @id @default(cuid())
+  slug         String     @unique
+  name         String
+  /// Scientific name of the causative agent, when one is established (e.g. "Yersinia pestis").
+  pathogen     String?
+  /// BACTERIUM | VIRUS | PARASITE | FUNGUS | PRION | TOXIN | UNKNOWN
+  pathogenType String
+  /// RESPIRATORY | VECTOR_BORNE | ENTERIC | ZOONOTIC | VACCINE_PREVENTABLE | HEMORRHAGIC | OTHER | UNKNOWN
+  category     String
+  /// Lower-case keywords used by the extractor (JSON string[]).
+  keywords     String     @default("[]")
+  description  String?
+  outbreaks    Outbreak[] @relation("confirmedDisease")
+  suspectedIn  Outbreak[] @relation("suspectedDisease")
+}
+
+model Outbreak {
+  id                 String                       @id @default(cuid())
+  slug               String                       @unique
+  title              String
+  summary            String
+  /// Disease established by laboratory confirmation (null while unconfirmed).
+  diseaseId          String?
+  disease            Disease?                     @relation("confirmedDisease", fields: [diseaseId], references: [id])
+  /// Disease under consideration but NOT confirmed.
+  suspectedDiseaseId String?
+  suspectedDisease   Disease?                     @relation("suspectedDisease", fields: [suspectedDiseaseId], references: [id])
+  /// UNCONFIRMED_INVESTIGATION | SUSPECTED_OUTBREAK | CONFIRMED_LOCALIZED | CONFIRMED_WIDESPREAD | RESOLVED
+  classification     String
+  /// UNKNOWN | UNDER_INVESTIGATION | SUSPECTED | CONFIRMED | RULED_OUT
+  pathogenStatus     String
+  countryCode        String
+  countryName        String
+  /// When the event first became publicly known (publication time of the earliest report).
+  firstReportedAt    DateTime
+  /// When the event itself began, if known.
+  eventStartDate     DateTime?
+  lastVerifiedAt     DateTime?
+  resolvedAt         DateTime?
+  featured           Boolean                      @default(false)
+  published          Boolean                      @default(false)
+  mergedIntoId       String?
+  mergedInto         Outbreak?                    @relation("merge", fields: [mergedIntoId], references: [id])
+  mergedFrom         Outbreak[]                   @relation("merge")
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  locations          OutbreakLocation[]
+  observations       OutbreakObservation[]
+  updates            OutbreakUpdate[]
+  articles           SourceArticle[]
+  claims             EvidenceClaim[]
+  statusHistory      InvestigationStatusHistory[]
+  riskAssessments    RiskAssessment[]
+
+  @@index([published, classification])
+}
+
+model OutbreakLocation {
+  id              String         @id @default(cuid())
+  outbreakId      String
+  outbreak        Outbreak       @relation(fields: [outbreakId], references: [id], onDelete: Cascade)
+  name            String
+  admin1          String?
+  countryCode     String
+  lat             Float
+  lng             Float
+  /// EXACT | CITY | ADMIN1 | COUNTRY — how precisely the coordinates are known.
+  precision       String
+  /// INVESTIGATION_SITE | CASE_LOCATION | AFFECTED_AREA
+  role            String
+  notes           String?
+  firstReportedAt DateTime
+  sourceArticleId String?
+  sourceArticle   SourceArticle? @relation(fields: [sourceArticleId], references: [id])
+}
+
+model OutbreakObservation {
+  id                 String         @id @default(cuid())
+  outbreakId         String
+  outbreak           Outbreak       @relation(fields: [outbreakId], references: [id], onDelete: Cascade)
+  /// CONFIRMED_CASES | PROBABLE_CASES | SUSPECTED_CASES | DEATHS | UNDER_OBSERVATION | HOSPITALIZED | CONTACTS_TESTED_NEGATIVE
+  metric             String
+  /// null = not reported / unknown. Never coerced to 0.
+  value              Int?
+  /// Upper bound when a source reports a range (e.g. "189–197 contacts").
+  valueHigh          Int?
+  isCumulative       Boolean        @default(true)
+  /// For DEATHS: has the death been attributed to the event's pathogen by laboratory confirmation?
+  deathCauseConfirmed Boolean?
+  /// Geographic scope the figure applies to (e.g. "Irkutsk Oblast").
+  scope              String?
+  /// Date the figure refers to.
+  asOfDate           DateTime?
+  /// Publication time of the source reporting it (drives historical playback).
+  reportedAt         DateTime
+  /// OFFICIAL | MEDIA
+  sourceType         String
+  /// UNVERIFIED | VERIFIED | DISPUTED | REFUTED
+  verificationStatus String
+  /// When the verification verdict was reached (playback hides verdicts reached after asOf).
+  verifiedAt         DateTime?
+  attributedTo       String?
+  notes              String?
+  sourceArticleId    String?
+  sourceArticle      SourceArticle? @relation(fields: [sourceArticleId], references: [id])
+  createdAt          DateTime       @default(now())
+
+  @@index([outbreakId, metric, reportedAt])
+}
+
+model OutbreakUpdate {
+  id                 String         @id @default(cuid())
+  outbreakId         String
+  outbreak           Outbreak       @relation(fields: [outbreakId], references: [id], onDelete: Cascade)
+  /// DEVELOPMENT | OFFICIAL_STATEMENT | MEASURE | CORRECTION | RECLASSIFICATION | MEDIA_REPORT
+  kind               String
+  title              String
+  body               String
+  /// When the development happened (may be unknown).
+  occurredAt         DateTime?
+  /// When it became public.
+  publishedAt        DateTime
+  /// OFFICIAL | MEDIA
+  sourceType         String
+  /// UNVERIFIED | VERIFIED | DISPUTED | REFUTED
+  verificationStatus String
+  verifiedAt         DateTime?
+  attributedTo       String?
+  sourceArticleId    String?
+  sourceArticle      SourceArticle? @relation(fields: [sourceArticleId], references: [id])
+  createdAt          DateTime       @default(now())
+
+  @@index([outbreakId, publishedAt])
+}
+
+model RiskAssessment {
+  id                 String         @id @default(cuid())
+  outbreakId         String
+  outbreak           Outbreak       @relation(fields: [outbreakId], references: [id], onDelete: Cascade)
+  organization       String
+  /// Population the assessment refers to (e.g. "General population", "EU/EEA").
+  scope              String
+  /// VERY_LOW | LOW | LOW_TO_MODERATE | MODERATE | HIGH | VERY_HIGH | NOT_ASSESSED
+  level              String
+  statement          String
+  publishedAt        DateTime
+  verificationStatus String
+  sourceArticleId    String?
+  sourceArticle      SourceArticle? @relation(fields: [sourceArticleId], references: [id])
+}
+
+model Source {
+  id                  String          @id @default(cuid())
+  slug                String          @unique
+  name                String
+  organization        String
+  /// OFFICIAL | MEDIA | AGGREGATOR
+  kind                String
+  /// WHO_DON_API | RSS | MANUAL
+  adapter             String
+  url                 String?
+  homepage            String?
+  enabled             Boolean         @default(true)
+  pollIntervalMinutes Int             @default(15)
+  lastFetchAt         DateTime?
+  lastSuccessAt       DateTime?
+  lastError           String?
+  consecutiveFailures Int             @default(0)
+  /// Verification of the endpoint itself: UNTESTED | WORKING | FAILING
+  endpointStatus      String          @default("UNTESTED")
+  notes               String?
+  createdAt           DateTime        @default(now())
+  articles            SourceArticle[]
+  runs                IngestionRun[]
+}
+
+model SourceArticle {
+  id                 String                       @id @default(cuid())
+  sourceId           String
+  source             Source                       @relation(fields: [sourceId], references: [id])
+  url                String
+  /// Normalized URL used for deduplication.
+  canonicalUrl       String                       @unique
+  externalId         String?
+  title              String
+  summary            String?
+  /// SHA-256 of normalized title — catches the same item republished under a different URL.
+  titleHash          String
+  language           String?
+  publishedAt        DateTime
+  /// Date of the underlying event, if stated.
+  eventDate          DateTime?
+  fetchedAt          DateTime                     @default(now())
+  ingestionRunId     String?
+  ingestionRun       IngestionRun?                @relation(fields: [ingestionRunId], references: [id])
+  /// JSON string[] of ISO-3166 alpha-2 codes found in the text.
+  countryCodes       String                       @default("[]")
+  /// JSON string[] of disease slugs found in the text.
+  diseaseSlugs       String                       @default("[]")
+  locationText       String?
+  /// EXACT | CITY | ADMIN1 | COUNTRY | UNKNOWN
+  geoPrecision       String                       @default("UNKNOWN")
+  /// PENDING | ACCEPTED | REJECTED | DUPLICATE
+  reviewStatus       String                       @default("PENDING")
+  /// OFFICIAL | MEDIA (copied from the source kind at ingest; official status is about the publisher)
+  sourceType         String
+  /// UNVERIFIED | VERIFIED | DISPUTED | RETRACTED
+  verificationStatus String                       @default("UNVERIFIED")
+  outbreakId         String?
+  outbreak           Outbreak?                    @relation(fields: [outbreakId], references: [id])
+  /// Suggested (not yet accepted) outbreak association from the matcher.
+  suggestedOutbreakId String?
+  duplicateOfId      String?
+  /// Raw upstream payload (JSON) for audit.
+  raw                String?
+  claims             EvidenceClaim[]
+  locations          OutbreakLocation[]
+  observations       OutbreakObservation[]
+  updates            OutbreakUpdate[]
+  riskAssessments    RiskAssessment[]
+  statusChanges      InvestigationStatusHistory[]
+
+  @@index([titleHash])
+  @@index([publishedAt])
+  @@index([reviewStatus])
+}
+
+model EvidenceClaim {
+  id                 String         @id @default(cuid())
+  articleId          String?
+  article            SourceArticle? @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  outbreakId         String?
+  outbreak           Outbreak?      @relation(fields: [outbreakId], references: [id])
+  /// CASE_COUNT | DEATH | OBSERVATION_COUNT | PATHOGEN_ID | RISK_ASSESSMENT | MEASURE | STATEMENT | LOCATION | OTHER
+  claimType          String
+  text               String
+  /// Metric (same vocabulary as OutbreakObservation.metric) when the claim is a number.
+  metric             String?
+  value              Int?
+  attributedTo       String?
+  /// OFFICIAL | MEDIA
+  sourceType         String
+  /// UNVERIFIED | VERIFIED | DISPUTED | REFUTED
+  verificationStatus String         @default("UNVERIFIED")
+  /// Free-text description of the conflicting claim(s), set by the conflict detector or an analyst.
+  conflictNote       String?
+  conflictsWithId    String?
+  /// AUTO | ADMIN | SEED
+  extractedBy        String
+  publishedAt        DateTime
+  reviewedAt         DateTime?
+  createdAt          DateTime       @default(now())
+}
+
+model InvestigationStatusHistory {
+  id                 String         @id @default(cuid())
+  outbreakId         String
+  outbreak           Outbreak       @relation(fields: [outbreakId], references: [id], onDelete: Cascade)
+  fromClassification String?
+  toClassification   String
+  fromPathogenStatus String?
+  toPathogenStatus   String
+  reason             String
+  /// When the change became publicly supported by evidence (drives playback).
+  effectiveAt        DateTime
+  actor              String
+  sourceArticleId    String?
+  sourceArticle      SourceArticle? @relation(fields: [sourceArticleId], references: [id])
+  createdAt          DateTime       @default(now())
+
+  @@index([outbreakId, effectiveAt])
+}
+
+model IngestionRun {
+  id             String          @id @default(cuid())
+  sourceId       String
+  source         Source          @relation(fields: [sourceId], references: [id])
+  /// SCHEDULED | MANUAL | CLI | TEST
+  trigger        String
+  /// RUNNING | SUCCESS | PARTIAL | FAILED
+  status         String
+  startedAt      DateTime        @default(now())
+  finishedAt     DateTime?
+  httpStatus     Int?
+  itemsFetched   Int             @default(0)
+  itemsNew       Int             @default(0)
+  itemsDuplicate Int             @default(0)
+  itemsFailed    Int             @default(0)
+  errorMessage   String?
+  /// JSON array of per-item error strings.
+  errors         String          @default("[]")
+  articles       SourceArticle[]
+
+  @@index([sourceId, startedAt])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String?
+  details    String   @default("{}")
+  actor      String   @default("admin")
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
