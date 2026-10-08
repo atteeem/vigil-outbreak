@@ -72,7 +72,7 @@ describe("full-pipeline verification (reachable is not enough)", () => {
   it("PIPELINE_VERIFIED requires retrieval, parsing, persistence, extraction and dedupe", async () => {
     const r = await verifyPipeline({ slug: "who-real", adapter: "WHO_DON_API", url: `${base}/who-real` }, { now: new Date("2026-10-08T00:00:00Z") });
     expect(r.verdict).toBe("PIPELINE_VERIFIED");
-    expect(r.stages.map((s) => s.name)).toEqual(["endpoint", "ingest", "persistence", "dates", "geography", "disease", "dedupe"]);
+    expect(r.stages.map((s) => s.name)).toEqual(["endpoint", "ingest", "persistence", "dates", "classification", "geography", "disease", "dedupe"]);
     expect(r.stored).toBe(12);
     expect(r.extraction!.withCountry).toBeGreaterThanOrEqual(11);
     expect(r.extraction!.withDisease).toBeGreaterThanOrEqual(10);

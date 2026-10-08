@@ -113,7 +113,7 @@ async function main() {
       const r = await verifyEndpoint(t.slug, t.adapter, t.url);
       results.push({ ...t, verdict: r.verdict === "VERIFIED" ? "ENDPOINT_OK" : r.verdict, failureKind: r.failureKind, endpoint: r, stages: r.checks });
       for (const c of r.checks) console.log(`    ${c.status.padEnd(4)} ${c.name.padEnd(11)} ${c.detail}`);
-      console.log(`  → ${r.verdict === "VERIFIED" ? "ENDPOINT_OK (ingestion NOT verified — run without --endpoint-only)" : r.verdict}${r.hint ? `\n    hint: ${r.hint}` : ""}\n`);
+      console.log(`  → ${r.verdict === "VERIFIED" ? "ENDPOINT_OK (ingestion NOT verified — run without --endpoint-only)" : r.verdict}${r.hint ? `\n    hint: ${r.hint}` : ""}${r.responseSample ? `\n    actual response: ${r.responseSample.slice(0, 600).replace(/\s+/g, " ")}` : ""}\n`);
       continue;
     }
     const r = await verifyPipeline({ slug: t.slug, adapter: t.adapter, url: t.url, label: t.label }, { maxPages });
@@ -121,6 +121,8 @@ async function main() {
     for (const c of r.stages) console.log(`    ${c.status.padEnd(4)} ${c.name.padEnd(12)} ${c.detail}`);
     if (r.verdict !== "PIPELINE_VERIFIED") for (const c of r.endpoint.checks.filter((x) => x.status !== "PASS")) console.log(`         · ${c.name}: ${c.detail}`);
     if (r.endpoint.hint) console.log(`    hint: ${r.endpoint.hint}`);
+    if (r.endpoint.responseSample) console.log(`    actual response: ${r.endpoint.responseSample.slice(0, 600).replace(/\s+/g, " ")}\n    (full excerpt saved in the JSON report — please send it so the adapter can be adjusted)`);
+    if (r.contentTypes && Object.keys(r.contentTypes).length) console.log(`    content types: ${Object.entries(r.contentTypes).map(([k, v]) => `${k} ${v}`).join(", ")}`);
     for (const s of r.samples.slice(0, 3)) console.log(`    e.g. ${s.publishedAt.slice(0, 10)}  [${s.countries.join(",") || "—"}] [${s.diseases.join(",") || "—"}]  ${s.title.slice(0, 80)}`);
     console.log(`  → ${r.verdict}${r.failedStage ? ` (failed at: ${r.failedStage})` : ""}\n`);
   }

@@ -31,11 +31,13 @@ or later.
 | `npm run ingest` / `npm run ingest -- --due` | One-shot ingestion of all enabled sources, or only those due (cron-friendly; exit code 2 if a source failed) |
 | `npm run ingest:backfill` | Same, following up to 4 upstream pages per source |
 | `npm run verify:sources` | **Full-pipeline** check of WHO, CDC Content Services and ECDC's officially listed feeds. A source counts as verified only if real records are retrieved, parsed, stored, have dates/geography/disease extracted and deduplicate on a second run. Uses a throwaway DB. Exit 0 = all verified, 2 = blocked by network. See `docs/LIVE_SOURCE_VERIFICATION.md` |
+| `npm run db:reference` | Non-destructive refresh of the disease reference list (names, agents, extractor keywords). Touches nothing else |
+| `npm run reprocess` / `-- --apply` | Re-derive event location, mentioned countries, diseases and content type for ingested articles with the current rules (dry run by default; never deletes; never changes review/verification/analyst links/claims) |
 | `npm run worker` | Standalone ingestion worker (production): polls due sources, writes a heartbeat, stops gracefully |
 | `npm run db:deploy` / `npm run db:check` | Apply migrations / verify migrations reproduce the schema and the DB has no drift |
 | `npm run db:pg:sync -- <name>` | After editing `prisma/schema.prisma`: regenerate the PostgreSQL schema and its migration (offline) |
 | `npm run test:pg` | The Vitest suite against PostgreSQL (`TEST_DATABASE_URL`, DB name must contain "test") |
-| `npm test` | Vitest: 88 unit + DB-backed integration tests (adapters through the real pipeline, verifier, retries, leases, concurrency) on a throwaway `prisma/vitest.db` |
+| `npm test` | Vitest: 136 unit + DB-backed integration tests (adapters through the real pipeline, verifier, retries, leases, concurrency) on a throwaway `prisma/vitest.db` |
 | `npm run test:e2e` | Playwright, desktop and Pixel 7. Builds its own `prisma/test.db` and serves fixtures, so no external network is needed |
 | `npm run typecheck` / `npm run lint` | TypeScript / ESLint |
 
@@ -123,6 +125,28 @@ The flow is fetch, normalize, extract, associate, dedupe, store, then flag confl
   source.
 - **Public visibility.** Official publications appear in the feed straight away, labelled "awaiting review".
   Media items appear only after an analyst accepts them.
+
+### Data quality rules (classifier version 1)
+
+- **Event location ≠ countries mentioned.** `countryCodes` holds where the reported event is: the text after the last
+  " – " in the title (WHO's "<Disease> – <Country>" convention), else countries in the title, else the lead
+  sentence; a known city named there also locates the event. Countries found only elsewhere (history, comparisons,
+  neighbours, travel) go to `mentionedCountryCodes` and are never used for the map, filters or outbreak matching.
+  More than 3 candidate countries, or "Multi-country" in the title, gives `MULTI_COUNTRY` with no single location.
+  "Congo basin", "Guinea worm", "Niger Delta" and "Lake Chad" are not countries.
+- **Diseases** come from the title first; body text is used only when the title names none (max 2). Matching
+  ignores case, hyphens and typographic apostrophes ("West-Nile", "Legionnaires’"). 50 diseases with keywords are
+  in `prisma/reference/diseases.ts` (incl. West Nile, Usutu, TBE, Legionnaires', STEC, hepatitis A, …); a specific
+  influenza (avian/zoonotic) suppresses generic "influenza".
+- **Content type.** Every ingested item is classified (`lib/ingestion/classify.ts`): outbreak report, situation
+  update, risk assessment, surveillance report, guidance, podcast/media, general publication, corporate. Guidance,
+  podcasts/media, corporate, general publications and routine annual surveillance reports are
+  `outbreakRelevant = false`. They are stored and visible on `/intelligence` under "All publication types", but they
+  are never suggested for an outbreak, never produce case-count claims and never count in outbreak KPIs. Analysts
+  can override relevance in `/admin/review`.
+- **Ingestion never creates outbreaks or case figures.** New publications become feed entries (official ones
+  marked "awaiting review") with UNVERIFIED claims. Outbreaks, observations and classifications change only through
+  analyst actions (tested).
 
 ### Freshness and trust
 

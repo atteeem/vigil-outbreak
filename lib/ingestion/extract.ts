@@ -9,19 +9,38 @@ export interface DiseaseKeywords {
   keywords: string[];
 }
 
+/** Lower-cases and folds punctuation variants so "West-Nile", "West Nile" and "west nile" match the same keyword,
+ * and typographic apostrophes match straight ones. */
+export function normalizeForMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[‐-―−-]/g, " ")
+    .replace(/[’‘`´]/g, "'")
+    .replace(/\s+/g, " ");
+}
+
+/** A specific disease suppresses a generic one when both match (e.g. "avian influenza" is not also "influenza"). */
+const SUPPRESSED_BY: Record<string, string[]> = {
+  influenza: ["avian-influenza"],
+  "covid-19": ["mers"],
+};
+
 export function findDiseases(text: string, diseases: readonly DiseaseKeywords[]): string[] {
-  const lower = text.toLowerCase();
+  const hay = normalizeForMatch(text);
   const hits: { slug: string; index: number }[] = [];
   for (const d of diseases) {
     let best = -1;
     for (const k of d.keywords) {
-      const re = new RegExp(`(?<![a-z])${k.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z])`);
-      const m = re.exec(lower);
+      const kw = normalizeForMatch(k).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const m = new RegExp(`(?<![a-z0-9])${kw}(?![a-z0-9])`).exec(hay);
       if (m && (best === -1 || m.index < best)) best = m.index;
     }
     if (best >= 0) hits.push({ slug: d.slug, index: best });
   }
-  return hits.sort((a, b) => a.index - b.index).map((h) => h.slug);
+  const slugs = hits.sort((a, b) => a.index - b.index).map((h) => h.slug);
+  return slugs.filter((s) => !(SUPPRESSED_BY[s] ?? []).some((x) => slugs.includes(x)));
 }
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -104,10 +123,16 @@ export function extractEventDate(text: string, notAfter: Date): Date | null {
 }
 
 export interface Extraction {
+  /** Where the reported event is (title, else the lead sentence). Used for maps, filters and outbreak matching. */
   countryCodes: string[];
+  /** Other countries named anywhere in the text — background, history, comparisons. Kept for context only. */
+  mentionedCountryCodes: string[];
+  /** Diseases the item is about (title first; body only when the title names none). */
   diseaseSlugs: string[];
   locationText: string | null;
-  geoPrecision: "CITY" | "COUNTRY" | "UNKNOWN";
+  geoPrecision: "CITY" | "COUNTRY" | "MULTI_COUNTRY" | "UNKNOWN";
+  /** Where the location came from. */
+  locationScope: "TITLE" | "LEAD" | "NONE";
   lat: number | null;
   lng: number | null;
   eventDate: Date | null;
@@ -115,20 +140,68 @@ export interface Extraction {
   unknownCause: boolean;
 }
 
-export function extract(title: string, body: string, publishedAt: Date, diseases: readonly DiseaseKeywords[]): Extraction {
+/** More countries than this in the deciding text = a multi-country item, not a located event. */
+export const MAX_PRIMARY_COUNTRIES = 3;
+
+/** First sentence(s) of the lead, where publishers state what happened and where. */
+export function leadSentence(text: string | null | undefined, max = 320): string {
+  const t = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  const m = /^(.{40,}?[.!?])(\s|$)/.exec(t);
+  return (m ? m[1]! : t).slice(0, max);
+}
+
+/** Decides the event location. Order of evidence:
+ *  1. Title text after the last " – " / " - " separator (WHO DON convention "<Disease> – <Country>").
+ *  2. Countries anywhere in the title.
+ *  3. The lead sentence.
+ * Countries found only elsewhere in the text are "mentioned", never the event location. */
+export function locateEvent(title: string, lead: string, fullText: string): { primary: string[]; mentioned: string[]; scope: Extraction["locationScope"]; multi: boolean } {
+  const all = findCountries(fullText);
+  let primary: string[] = [];
+  let scope: Extraction["locationScope"] = "NONE";
+  const parts = title.split(/\s+[–—-]\s+/);
+  if (parts.length > 1) primary = findCountries(parts[parts.length - 1]!);
+  if (primary.length) scope = "TITLE";
+  if (!primary.length) {
+    primary = findCountries(title);
+    if (primary.length) scope = "TITLE";
+  }
+  if (!primary.length && lead) {
+    primary = findCountries(lead);
+    if (primary.length) scope = "LEAD";
+  }
+  const multi = primary.length > MAX_PRIMARY_COUNTRIES || /\bmulti[\s-]?country\b|\bglobal (situation|update)\b/i.test(title);
+  if (multi) primary = [];
+  return { primary, mentioned: all.filter((c) => !primary.includes(c)), scope: multi ? scope : primary.length ? scope : "NONE", multi };
+}
+
+export function extract(title: string, body: string, publishedAt: Date, diseases: readonly DiseaseKeywords[], opts: { lead?: string | null } = {}): Extraction {
   const text = `${title}\n${body}`;
-  const countryCodes = findCountries(text);
-  const city = findCity(text);
-  const cityOk = city && (countryCodes.length === 0 || countryCodes.includes(city.country));
+  const lead = leadSentence(opts.lead ?? body);
+  const loc = locateEvent(title, lead, text);
+  // A city counts only if it is named in the title or lead AND lies in an event country. A known city named there
+  // without any country also locates the event in that city's country.
+  const city = findCity(`${title}\n${lead}`);
+  if (city && !loc.multi && loc.primary.length === 0) {
+    loc.primary = [city.country];
+    loc.mentioned = loc.mentioned.filter((c) => c !== city.country);
+    loc.scope = findCity(title) ? "TITLE" : "LEAD";
+  }
+  const cityOk = Boolean(city && loc.primary.includes(city.country));
+  const titleDiseases = findDiseases(title, diseases);
+  const diseaseSlugs = titleDiseases.length ? titleDiseases : findDiseases(`${lead}\n${body}`, diseases).slice(0, 2);
   return {
-    countryCodes: cityOk && !countryCodes.includes(city.country) ? [city.country, ...countryCodes] : countryCodes,
-    diseaseSlugs: findDiseases(text, diseases),
-    locationText: cityOk ? `${city.name}${city.admin1 ? `, ${city.admin1}` : ""}` : null,
-    geoPrecision: cityOk ? "CITY" : countryCodes.length ? "COUNTRY" : "UNKNOWN",
-    lat: cityOk ? city.lat : null,
-    lng: cityOk ? city.lng : null,
+    countryCodes: loc.primary,
+    mentionedCountryCodes: loc.mentioned,
+    diseaseSlugs,
+    locationText: cityOk ? `${city!.name}${city!.admin1 ? `, ${city!.admin1}` : ""}` : loc.multi ? "Multi-country" : null,
+    geoPrecision: cityOk ? "CITY" : loc.multi ? "MULTI_COUNTRY" : loc.primary.length ? "COUNTRY" : "UNKNOWN",
+    locationScope: loc.scope,
+    lat: cityOk ? city!.lat : null,
+    lng: cityOk ? city!.lng : null,
     eventDate: extractEventDate(text, publishedAt),
     counts: extractCounts(text),
-    unknownCause: /\b(unknown (origin|cause|aetiology|etiology)|undiagnosed|unexplained|unidentified (illness|disease))\b/i.test(text),
+    unknownCause: /\b(unknown (origin|cause|aetiology|etiology)|undiagnosed|unexplained|unidentified (illness|disease))\b/i.test(`${title}\n${lead}`),
   };
 }

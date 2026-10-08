@@ -53,3 +53,25 @@ export function OriginBadge({ origin, fetchedAt, className }: { origin: string; 
   const m = map[origin] ?? map.MANUAL!;
   return <span title={m.title} data-testid="origin-badge" data-origin={origin} className={cn("inline-flex items-center rounded border px-1.5 py-px text-[10px] font-medium whitespace-nowrap", m.cls, className)}>{m.label}</span>;
 }
+
+const CONTENT_LABEL: Record<string, string> = {
+  OUTBREAK_REPORT: "Outbreak report",
+  SITUATION_UPDATE: "Situation update",
+  RISK_ASSESSMENT: "Risk assessment",
+  SURVEILLANCE_REPORT: "Surveillance report",
+  GUIDANCE: "Guidance",
+  PODCAST_MEDIA: "Podcast / media",
+  GENERAL_PUBLICATION: "General publication",
+  CORPORATE: "Corporate",
+  UNCLASSIFIED: "Unclassified",
+};
+
+/** Publication type from the content classifier; muted when the item is not outbreak-related. */
+export function ContentTypeBadge({ type, relevant, className }: { type: string; relevant: boolean; className?: string }) {
+  if (type === "UNCLASSIFIED") return null;
+  return (
+    <span data-testid="content-type-badge" data-type={type} title={relevant ? "Outbreak-related publication" : "Not an outbreak report — excluded from outbreak matching, case-count claims and KPIs"} className={cn("inline-flex items-center rounded px-1.5 py-px text-[10px] font-medium whitespace-nowrap", relevant ? "bg-white/[0.05] text-ink-dim" : "border border-dashed border-line-strong text-ink-faint", className)}>
+      {CONTENT_LABEL[type] ?? type}
+    </span>
+  );
+}

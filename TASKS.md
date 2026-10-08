@@ -56,6 +56,18 @@ Legend: [x] done · [~] partial · [ ] open · [!] blocked
 - [x] docs/LOCAL_SETUP_WINDOWS.md, docs/DEPLOYMENT.md, updated LIVE_SOURCE_VERIFICATION.md
 - [!] Real-source runs (WHO, CDC, ECDC) — must be executed outside the sandbox (`npm run verify:sources` on your computer)
 
+## Milestone: Data quality after the first real-network run (2026-10-09)
+Real run on the owner's Windows PC: WHO DON + 11 ECDC feeds PIPELINE_VERIFIED; CDC Content Services SCHEMA_MISMATCH.
+- [x] ECDC discovery: skip links / in-page anchors / the index page itself are no longer "feeds" (`/en/rss-feeds` matched the old loose `/rss` pattern)
+- [~] CDC SCHEMA_MISMATCH: adapter now accepts XML→`format=json` retry, JSONP/BOM, PascalCase, bare arrays, `/Date()/`/US/zone-less dates, relative URLs, non-"Published" statuses; every mismatch records the ACTUAL response shape (`responseSample` in the report). Root cause still unconfirmed — needs the shape from the next real run
+- [x] Disease recognition: West Nile (+ 29 more diseases), hyphen/apostrophe-insensitive matching, title-first diseases, generic-influenza suppression
+- [x] Event location vs mentioned countries (`mentionedCountryCodes`), multi-country detection, city-implies-country, alias double-count fix, non-country phrases
+- [x] Content classification (`contentType`, `outbreakRelevant`); non-relevant items never matched/claimed/counted; feed "All publication types" toggle; admin relevance override
+- [x] Ingestion creates feed entries only — no outbreaks/observations/classification changes (tested)
+- [x] Non-destructive upgrades: `db:reference`, `reprocess` (dry run / --apply), seed keeps existing seeded outbreaks
+- [x] Regression fixtures + 48 new tests (136 Vitest on SQLite and PostgreSQL; 25 Playwright); typecheck, lint, build
+- [ ] Re-run `npm run verify:sources` and send the CDC `responseSample` if it still fails
+
 ## Next
 - [ ] Re-verify seeded facts against the original WHO/ECDC/Reuters pages once network access is available
 - [ ] Manual article entry form in admin (articles currently arrive via ingestion or seed)

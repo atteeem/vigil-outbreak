@@ -226,8 +226,18 @@ model SourceArticle {
   fetchedAt          DateTime                     @default(now())
   ingestionRunId     String?
   ingestionRun       IngestionRun?                @relation(fields: [ingestionRunId], references: [id])
-  /// JSON string[] of ISO-3166 alpha-2 codes found in the text.
+  /// JSON string[] of ISO-3166 alpha-2 codes where the reported event is located (title / lead), not background mentions.
   countryCodes       String                       @default("[]")
+  /// JSON string[] of other countries merely mentioned in the text (history, comparisons, travel, risk context).
+  mentionedCountryCodes String                    @default("[]")
+  /// OUTBREAK_REPORT | SITUATION_UPDATE | RISK_ASSESSMENT | SURVEILLANCE_REPORT | GUIDANCE | PODCAST_MEDIA |
+  /// GENERAL_PUBLICATION | CORPORATE | UNCLASSIFIED (lib/ingestion/classify.ts)
+  contentType        String                       @default("UNCLASSIFIED")
+  /// False for guidance, podcasts, corporate and general publications: kept and shown on request, but never
+  /// associated with outbreaks, never used for case-count claims and excluded from outbreak KPIs.
+  outbreakRelevant   Boolean                      @default(true)
+  /// Version of the extraction/classification rules that produced the derived fields (0 = before versioning).
+  classifierVersion  Int                          @default(0)
   /// JSON string[] of disease slugs found in the text.
   diseaseSlugs       String                       @default("[]")
   locationText       String?

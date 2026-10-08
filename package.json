@@ -23,7 +23,9 @@
     "db:pg:sync": "node scripts/db-pg-sync.mjs",
     "db:pg:check": "node scripts/db-pg-sync.mjs --check",
     "db:check": "node scripts/db-check.mjs",
-    "test:pg": "node scripts/test-pg.mjs"
+    "test:pg": "node scripts/test-pg.mjs",
+    "db:reference": "tsx scripts/load-reference.ts",
+    "reprocess": "tsx scripts/reprocess.ts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.0",

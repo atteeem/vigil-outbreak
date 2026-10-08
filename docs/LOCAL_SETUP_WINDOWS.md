@@ -237,7 +237,23 @@ $env:TEST_DATABASE_URL = "postgresql://postgres:YOUR_PASSWORD@localhost:5432/vig
 npm run test:pg                       # same 88 tests on PostgreSQL; restores the SQLite client afterwards
 ```
 
+## 12. Updating an existing installation (keeps your data)
+
+```powershell
+cd C:\dev\vigil-outbreak
+git pull                                  # or clone the new bundle into a new folder and copy prisma\dev.db + .env over
+npm ci
+npx prisma migrate deploy                 # adds the new columns; existing rows are copied, nothing is deleted
+npm run db:reference                      # adds/refreshes diseases (e.g. West Nile); touches nothing else
+npm run reprocess                         # DRY RUN: lists how stored ingested articles would be re-derived
+npm run reprocess -- --apply              # apply (never deletes; keeps review/verification/analyst links/claims)
+npm run verify:sources                    # re-run the real-source check
+```
+
+`npm run db:seed` is also safe now: if the seeded outbreaks already exist it keeps them as they are.
+
 ## What I need back from you
 
-1. The output of `npm run verify:sources` (or the newest `reports\source-verification-*.json`).
+1. The output of `npm run verify:sources` (or the newest `reports\source-verification-*.json`). For CDC, the
+   `actual response:` line / `responseSample` field is what identifies its real format.
 2. If anything failed, the failure class and message shown for that source.

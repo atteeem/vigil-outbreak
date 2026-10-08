@@ -1,0 +1,32 @@
+{
+  "value": [
+    {
+      "Id": "rv-nipah-1",
+      "DonId": "2026-DON-RV01",
+      "Title": "Nipah virus infection – Bangladesh",
+      "UrlName": "2026-DON-RV01",
+      "PublicationDate": "2026-10-03T10:00:00Z",
+      "Summary": "<p>Between 1 January and 25 September 2026, the Ministry of Health and Family Welfare of Bangladesh reported 7 confirmed cases of Nipah virus infection, including 5 deaths, in four districts.</p>",
+      "Overview": "<p>Nipah virus (NiV) is a zoonotic virus transmitted to humans from infected animals or contaminated food.</p>",
+      "Epidemiology": "<p>Nipah virus infection was first recognized in 1999 during an outbreak among pig farmers in Malaysia, with cases also reported in Singapore. Outbreaks have since occurred almost annually in Bangladesh and periodically in India, including Kerala. Infection has also been reported in the Philippines. Bangladesh shares borders with India and Myanmar, where fruit bats of the genus Pteropus are present.</p>",
+      "Assessment": "<p>The overall risk at national level is assessed as moderate and at regional and global levels as low.</p>"
+    },
+    {
+      "Id": "rv-wnv-1",
+      "DonId": "2026-DON-RV02",
+      "Title": "West Nile virus infection - Greece",
+      "UrlName": "2026-DON-RV02",
+      "PublicationDate": "2026-09-20T09:00:00Z",
+      "Summary": "<p>As of 15 September 2026, the National Public Health Organization of Greece reported 112 locally acquired cases of West Nile virus infection, including 9 deaths, in the regions of Attica and Central Macedonia.</p>",
+      "Epidemiology": "<p>Human cases have also been reported this season in Italy, Romania, Hungary and Serbia.</p>"
+    },
+    {
+      "Id": "rv-multi-1",
+      "DonId": "2026-DON-RV03",
+      "Title": "Mpox – Multi-country external situation",
+      "UrlName": "2026-DON-RV03",
+      "PublicationDate": "2026-09-18T09:00:00Z",
+      "Summary": "<p>Since January 2026, cases of clade Ib mpox have been reported in the Democratic Republic of the Congo, Burundi, Rwanda, Uganda, Kenya and Zambia.</p>"
+    }
+  ]
+}

@@ -9,6 +9,10 @@ export interface FetchedItem {
   publishedAt: Date;
   language: string | null;
   raw: unknown;
+  /** The publisher's own summary/lead (used to locate the event); falls back to `text`. */
+  lead?: string | null;
+  /** Publisher-supplied type hints, e.g. CDC mediaType ("Podcast", "Video"). */
+  hints?: string[];
 }
 
 export interface AdapterResult {
@@ -32,6 +36,8 @@ export class IngestionError extends Error {
     readonly kind: FailureKind = "UNKNOWN",
     /** Server-requested delay (Retry-After), if any. */
     readonly retryAfterMs: number | null = null,
+    /** Diagnostic excerpt of the response (shape summary or body start) for SCHEMA_MISMATCH and similar. */
+    readonly detail: string | null = null,
   ) {
     super(message);
     this.name = "IngestionError";

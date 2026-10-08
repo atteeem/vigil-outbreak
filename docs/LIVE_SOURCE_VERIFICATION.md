@@ -116,3 +116,15 @@ Windows (PowerShell) equivalents: `docs/LOCAL_SETUP_WINDOWS.md` §6 and §10.
   live API accepts. Keep whatever passes `verify:sources`.
 - **ECDC feed IDs.** `taxonomy/term/1307` (News) comes from a third-party directory and must be confirmed on
   ECDC's RSS page.
+
+## 7. Results of the first real run (2026-10, owner's Windows PC) and follow-up
+
+- WHO Disease Outbreak News: **PIPELINE_VERIFIED**. ECDC: **11 feeds PIPELINE_VERIFIED**. Nothing was blocked.
+- The ECDC index's "Skip to main content" link was wrongly discovered as a feed. **Fixed.**
+- CDC Content Services: **SCHEMA_MISMATCH**. The live response was not captured, so the root cause is not yet
+  confirmed. The adapter now accepts every plausible variant (XML → retry with `format=json`, JSONP/BOM,
+  PascalCase keys, bare arrays, .NET `/Date(…)/`, US and zone-less dates, relative URLs, other status values). If
+  it still fails, the console line `actual response:` and `responseSample` in `reports\source-verification-*.json`
+  show the real shape (top-level keys, item keys, sample values). Please send that excerpt.
+- The report now also lists each source's **content types** (outbreak reports vs guidance, podcasts, corporate, …).
+  Geography/disease thresholds are measured on outbreak-relevant records only.

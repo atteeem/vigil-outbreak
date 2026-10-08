@@ -9,32 +9,12 @@
 import "dotenv/config";
 import { prisma } from "../lib/db";
 import { canonicalizeUrl, titleHash } from "../lib/ingestion/normalize";
+import { DISEASES } from "./reference/diseases";
 
 const D = (iso: string) => new Date(iso);
 const intervalMinutes = Number(process.env.INGESTION_INTERVAL_MINUTES) || 15;
 
-const DISEASES = [
-  { slug: "plague", name: "Plague", pathogen: "Yersinia pestis", pathogenType: "BACTERIUM", category: "ZOONOTIC", keywords: ["plague", "pneumonic plague", "bubonic plague", "septicemic plague", "yersinia pestis", "y. pestis"], description: "Bacterial zoonosis caused by Yersinia pestis. Pneumonic plague (lung infection) can spread person-to-person via respiratory droplets; treatable with antibiotics if started early." },
-  { slug: "ebola", name: "Ebola disease", pathogen: "Orthoebolavirus spp. (incl. Bundibugyo virus)", pathogenType: "VIRUS", category: "HEMORRHAGIC", keywords: ["ebola", "bundibugyo", "ebolavirus", "orthoebolavirus", "sudan virus disease"], description: "Severe viral haemorrhagic disease. Bundibugyo virus has no licensed vaccine or therapeutic." },
-  { slug: "marburg", name: "Marburg virus disease", pathogen: "Orthomarburgvirus marburgense", pathogenType: "VIRUS", category: "HEMORRHAGIC", keywords: ["marburg"], description: null },
-  { slug: "mpox", name: "Mpox", pathogen: "Monkeypox virus (MPXV)", pathogenType: "VIRUS", category: "ZOONOTIC", keywords: ["mpox", "monkeypox", "clade ib", "clade ia", "clade ii"], description: null },
-  { slug: "avian-influenza", name: "Avian influenza", pathogen: "Influenza A virus (e.g. A(H5N1))", pathogenType: "VIRUS", category: "RESPIRATORY", keywords: ["avian influenza", "bird flu", "h5n1", "h5n6", "h7n9", "h9n2", "h5n2", "a(h5n1)"], description: null },
-  { slug: "yellow-fever", name: "Yellow fever", pathogen: "Yellow fever virus", pathogenType: "VIRUS", category: "VECTOR_BORNE", keywords: ["yellow fever"], description: null },
-  { slug: "cholera", name: "Cholera", pathogen: "Vibrio cholerae", pathogenType: "BACTERIUM", category: "ENTERIC", keywords: ["cholera", "vibrio cholerae"], description: null },
-  { slug: "measles", name: "Measles", pathogen: "Measles virus", pathogenType: "VIRUS", category: "VACCINE_PREVENTABLE", keywords: ["measles"], description: null },
-  { slug: "dengue", name: "Dengue", pathogen: "Dengue virus", pathogenType: "VIRUS", category: "VECTOR_BORNE", keywords: ["dengue"], description: null },
-  { slug: "nipah", name: "Nipah virus infection", pathogen: "Nipah virus", pathogenType: "VIRUS", category: "ZOONOTIC", keywords: ["nipah"], description: null },
-  { slug: "mers", name: "MERS", pathogen: "MERS-CoV", pathogenType: "VIRUS", category: "RESPIRATORY", keywords: ["mers", "mers-cov", "middle east respiratory syndrome"], description: null },
-  { slug: "covid-19", name: "COVID-19", pathogen: "SARS-CoV-2", pathogenType: "VIRUS", category: "RESPIRATORY", keywords: ["covid-19", "covid", "sars-cov-2", "coronavirus disease"], description: null },
-  { slug: "anthrax", name: "Anthrax", pathogen: "Bacillus anthracis", pathogenType: "BACTERIUM", category: "ZOONOTIC", keywords: ["anthrax", "bacillus anthracis"], description: null },
-  { slug: "meningitis", name: "Meningococcal disease", pathogen: "Neisseria meningitidis", pathogenType: "BACTERIUM", category: "VACCINE_PREVENTABLE", keywords: ["meningitis", "meningococcal"], description: null },
-  { slug: "diphtheria", name: "Diphtheria", pathogen: "Corynebacterium diphtheriae", pathogenType: "BACTERIUM", category: "VACCINE_PREVENTABLE", keywords: ["diphtheria"], description: null },
-  { slug: "polio", name: "Poliomyelitis", pathogen: "Poliovirus", pathogenType: "VIRUS", category: "VACCINE_PREVENTABLE", keywords: ["polio", "poliovirus", "poliomyelitis", "cvdpv2", "wpv1"], description: null },
-  { slug: "lassa", name: "Lassa fever", pathogen: "Lassa virus", pathogenType: "VIRUS", category: "HEMORRHAGIC", keywords: ["lassa"], description: null },
-  { slug: "cchf", name: "Crimean-Congo haemorrhagic fever", pathogen: "CCHF virus", pathogenType: "VIRUS", category: "HEMORRHAGIC", keywords: ["crimean-congo", "cchf"], description: null },
-  { slug: "chikungunya", name: "Chikungunya", pathogen: "Chikungunya virus", pathogenType: "VIRUS", category: "VECTOR_BORNE", keywords: ["chikungunya"], description: null },
-  { slug: "oropouche", name: "Oropouche virus disease", pathogen: "Oropouche virus", pathogenType: "VIRUS", category: "VECTOR_BORNE", keywords: ["oropouche"], description: null },
-];
+// Disease reference data lives in prisma/reference/diseases.ts (also loaded by `npm run db:reference`).
 
 // Automatic sources. Only the WHO DON endpoint is enabled by default: its URL is documented by WHO. ECDC and CDC
 // feed URLs could not be confirmed from this environment, so those sources ship disabled with an empty/candidate
@@ -115,6 +95,13 @@ async function main() {
   const sources = new Map((await prisma.source.findMany()).map((s) => [s.slug, s]));
 
   const SEED_SLUGS = ["russia-irkutsk-2026", "ebola-bundibugyo-drc-2026", "ebola-bundibugyo-uganda-2026", "mpox-clade-ib-drc-2026", "avian-influenza-h5n1-bangladesh-2026", "yellow-fever-cote-divoire-2026"];
+  // Never destroy analyst work: if the seeded outbreaks already exist, keep them (and their edits, verifications and
+  // linked evidence) unless the operator explicitly asks for a reset.
+  const existingSeeded = await prisma.outbreak.count({ where: { slug: { in: SEED_SLUGS } } });
+  if (existingSeeded > 0 && !process.argv.includes("--reset-seeded-outbreaks")) {
+    console.log(`Seeded outbreaks already present (${existingSeeded}); kept as they are. Reference data refreshed. Use --reset-seeded-outbreaks to recreate them.`);
+    return;
+  }
   await prisma.outbreak.deleteMany({ where: { slug: { in: SEED_SLUGS } } });
 
   const articleIds = new Map<string, string>();

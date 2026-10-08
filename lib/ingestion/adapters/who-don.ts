@@ -41,7 +41,8 @@ export function parseWhoDon(json: unknown): { items: FetchedItem[]; itemErrors: 
       continue;
     }
     const text = [row.Summary, row.Overview, row.Epidemiology, row.Assessment].map((v) => stripHtml(str(v))).filter(Boolean).join("\n\n");
-    items.push({ externalId: str(row.DonId) ?? str(row.Id) ?? urlName, url, title, text, publishedAt, language: "en", raw: row });
+    const lead = stripHtml(str(row.Summary)) || stripHtml(str(row.Overview));
+    items.push({ externalId: str(row.DonId) ?? str(row.Id) ?? urlName, url, title, text, publishedAt, language: "en", raw: row, lead });
   }
   // Rows exist but none has the documented fields: the schema changed. Fail loudly instead of storing nothing quietly.
   if (value.length > 0 && items.length === 0) throw new IngestionError(`WHO DON returned ${value.length} rows but none had Title/PublicationDate/UrlName — schema changed`, null, "SCHEMA_MISMATCH");

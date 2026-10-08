@@ -31,7 +31,9 @@ export interface PipelineVerification {
   stages: Check[];
   stored: number;
   extraction: { total: number; withCountry: number; withDisease: number; withUnknownCauseFlag: number; withEventDate: number; validPublishedAt: number } | null;
-  samples: { title: string; publishedAt: string; url: string; countries: string[]; diseases: string[] }[];
+  samples: { title: string; publishedAt: string; url: string; countries: string[]; diseases: string[]; contentType: string; outbreakRelevant: boolean }[];
+  /** How the stored records were classified (outbreak reports vs guidance, podcasts, corporate, …). */
+  contentTypes: Record<string, number> | null;
   checkedAt: string;
 }
 
@@ -48,7 +50,7 @@ const pct = (n: number, d: number) => (d ? `${Math.round((100 * n) / d)}%` : "n/
 export async function verifyPipeline(t: PipelineTarget, opts: { now?: Date; maxPages?: number } = {}): Promise<PipelineVerification> {
   const now = opts.now ?? new Date();
   const stages: Check[] = [];
-  const base = { slug: t.slug, label: t.label ?? t.slug, adapter: t.adapter, url: t.url, stages, stored: 0, extraction: null, samples: [], checkedAt: now.toISOString() };
+  const base = { slug: t.slug, label: t.label ?? t.slug, adapter: t.adapter, url: t.url, stages, stored: 0, extraction: null, samples: [], contentTypes: null, checkedAt: now.toISOString() };
 
   // 1. Endpoint: reachable, documented schema, freshness, ordering, paging.
   const endpoint = await verifyEndpoint(t.slug, t.adapter, t.url, now);
@@ -87,17 +89,26 @@ export async function verifyPipeline(t: PipelineTarget, opts: { now?: Date; maxP
     withEventDate: rows.filter((r) => r.eventDate).length,
     validPublishedAt: rows.filter((r) => !Number.isNaN(r.publishedAt.getTime()) && r.publishedAt.getTime() <= tol && r.publishedAt.getFullYear() >= 1990).length,
   };
-  const samples = rows.slice(0, 5).map((r) => ({ title: r.title, publishedAt: r.publishedAt.toISOString(), url: r.url, countries: safeJson<string[]>(r.countryCodes, []), diseases: safeJson<string[]>(r.diseaseSlugs, []) }));
+  const samples = rows.slice(0, 5).map((r) => ({ title: r.title, publishedAt: r.publishedAt.toISOString(), url: r.url, countries: safeJson<string[]>(r.countryCodes, []), diseases: safeJson<string[]>(r.diseaseSlugs, []), contentType: r.contentType, outbreakRelevant: r.outbreakRelevant }));
+  const contentTypes: Record<string, number> = {};
+  for (const r of rows) contentTypes[r.contentType] = (contentTypes[r.contentType] ?? 0) + 1;
+  base.contentTypes = contentTypes as never;
   const th = THRESHOLDS[t.adapter] ?? THRESHOLDS.RSS!;
   const dates = extraction.validPublishedAt === extraction.total;
   stages.push({ name: "dates", status: dates ? "PASS" : "FAIL", detail: `${pct(extraction.validPublishedAt, extraction.total)} valid publication dates; ${pct(extraction.withEventDate, extraction.total)} with an explicit event date in text` });
   if (!dates) return fail("dates", `${extraction.total - extraction.validPublishedAt} records have invalid or future publication dates`, "SCHEMA_MISMATCH", { extraction, samples, stored: rows.length });
-  const diseaseOrUnknown = extraction.withDisease + extraction.withUnknownCauseFlag;
-  const geoOk = extraction.withCountry / extraction.total >= th.country;
-  const disOk = Math.min(diseaseOrUnknown, extraction.total) / extraction.total >= th.disease;
-  const missingGeo = rows.filter((r) => safeJson<string[]>(r.countryCodes, []).length === 0).slice(0, 3).map((r) => `"${r.title.slice(0, 70)}"`);
-  stages.push({ name: "geography", status: geoOk ? "PASS" : th.fail ? "FAIL" : "WARN", detail: `${pct(extraction.withCountry, extraction.total)} with ≥1 country (threshold ${Math.round(th.country * 100)}%)${!geoOk && missingGeo.length ? `; e.g. no country in ${missingGeo.join(", ")}` : ""}` });
-  stages.push({ name: "disease", status: disOk ? "PASS" : th.fail ? "FAIL" : "WARN", detail: `${pct(extraction.withDisease, extraction.total)} with a recognised disease, ${pct(extraction.withUnknownCauseFlag, extraction.total)} flagged unknown cause (threshold ${Math.round(th.disease * 100)}% combined)` });
+  // Extraction quality is judged on outbreak-relevant records: guidance, podcasts and corporate items legitimately
+  // name no outbreak location.
+  const relevant = rows.filter((r) => r.outbreakRelevant);
+  const relCountry = relevant.filter((r) => safeJson<string[]>(r.countryCodes, []).length > 0).length;
+  const relDisease = relevant.filter((r) => safeJson<string[]>(r.diseaseSlugs, []).length > 0 || r.claims.some((c) => c.claimType === "PATHOGEN_ID")).length;
+  const denom = Math.max(1, relevant.length);
+  const geoOk = relevant.length === 0 ? !th.fail : relCountry / denom >= th.country;
+  const disOk = relevant.length === 0 ? !th.fail : relDisease / denom >= th.disease;
+  stages.push({ name: "classification", status: relevant.length || !th.fail ? "PASS" : "FAIL", detail: `${relevant.length} of ${rows.length} records outbreak-relevant; ${Object.entries(contentTypes).map(([k, v]) => `${k} ${v}`).join(", ")}` });
+  const missingGeo = rows.filter((r) => r.outbreakRelevant && safeJson<string[]>(r.countryCodes, []).length === 0).slice(0, 3).map((r) => `"${r.title.slice(0, 70)}"`);
+  stages.push({ name: "geography", status: geoOk ? "PASS" : th.fail ? "FAIL" : "WARN", detail: `${pct(relCountry, relevant.length)} of outbreak-relevant records with an event country (threshold ${Math.round(th.country * 100)}%); ${pct(extraction.withCountry, extraction.total)} of all records${!geoOk && missingGeo.length ? `; e.g. no country in ${missingGeo.join(", ")}` : ""}` });
+  stages.push({ name: "disease", status: disOk ? "PASS" : th.fail ? "FAIL" : "WARN", detail: `${pct(relDisease, relevant.length)} of outbreak-relevant records with a recognised disease or unknown-cause flag (threshold ${Math.round(th.disease * 100)}%); ${pct(extraction.withDisease, extraction.total)} of all records` });
   if (th.fail && (!geoOk || !disOk)) {
     return { ...base, stored: rows.length, extraction, samples, verdict: "FAILED", failedStage: !geoOk ? "geography" : "disease", failureKind: null, endpoint };
   }
@@ -109,5 +120,5 @@ export async function verifyPipeline(t: PipelineTarget, opts: { now?: Date; maxP
   if (second.itemsNew !== 0 || after !== rows.length) return fail("dedupe", `second run stored ${second.itemsNew} new records (rows ${rows.length} → ${after})`, null, { extraction, samples, stored: rows.length });
   stages.push({ name: "dedupe", status: "PASS", detail: `second run: ${second.itemsFetched} fetched, 0 new, ${second.itemsDuplicate} duplicates; row count unchanged (${after})` });
 
-  return { ...base, stored: rows.length, extraction, samples, verdict: "PIPELINE_VERIFIED", failedStage: null, failureKind: null, endpoint };
+  return { ...base, stored: rows.length, extraction, samples, contentTypes, verdict: "PIPELINE_VERIFIED", failedStage: null, failureKind: null, endpoint };
 }

@@ -72,7 +72,7 @@ describe("CDC Content Services adapter", () => {
   });
   it("fails loudly on a different schema", () => {
     expect(() => parseCdcContent({ data: [] })).toThrow(/results/);
-    expect(() => parseCdcContent({ results: [{ foo: 1 }, { bar: 2 }] })).toThrow(/schema changed/);
+    expect(() => parseCdcContent({ results: [{ foo: 1 }, { bar: 2 }] })).toThrow(/none had name\/url\/date in a recognised form.*first item keys: foo/);
     expect(() => parseCdcContent({ meta: { status: 400, message: ["bad"] }, results: [] })).toThrow(/400/);
   });
 });

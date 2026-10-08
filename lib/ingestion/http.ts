@@ -73,10 +73,16 @@ async function fetchTextOnce(url: string, accept: string): Promise<FetchTextResu
   return { status: res.status, body, contentType: res.headers.get("content-type") ?? "", finalUrl: res.url || url };
 }
 
+/** Parses JSON, tolerating a UTF-8 BOM and a JSONP wrapper (`callback({...});`). On failure the error carries the
+ * start of the body so the real format can be diagnosed. */
 export function parseJson(body: string, status: number, what: string): unknown {
+  let t = body.replace(/^\uFEFF/, "").trim();
+  const jsonp = /^[\w$.]+\s*\(([\s\S]*)\)\s*;?\s*$/.exec(t);
+  if (jsonp) t = jsonp[1]!;
   try {
-    return JSON.parse(body);
+    return JSON.parse(t);
   } catch {
-    throw new IngestionError(`${what} did not return JSON (got ${body.trim().slice(0, 60) || "empty body"})`, status, "SCHEMA_MISMATCH");
+    const kind = /^</.test(t) ? (/^<\?xml|^<\w+:?\w*\s+xmlns/i.test(t) ? "XML" : "HTML/XML") : "non-JSON";
+    throw new IngestionError(`${what} returned ${kind} instead of JSON (starts: ${t.slice(0, 80).replace(/\s+/g, " ") || "empty body"})`, status, "SCHEMA_MISMATCH", null, t.slice(0, 2000));
   }
 }

@@ -29,6 +29,23 @@ function atomLink(v: unknown): string | null {
 
 const asArray = <T,>(v: T | T[] | undefined): T[] => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
 
+/** One parsed feed entry → FetchedItem, or an error message. Exported so stored raw rows can be re-derived. */
+export function rssRowToItem(row: Record<string, unknown>, feedUrl: string): FetchedItem | string {
+  const title = stripHtml(text(row.title));
+  const link = text(row.link) && typeof row.link !== "object" ? text(row.link) : atomLink(row.link) ?? text(row.guid);
+  const publishedAt = parseDate(text(row.pubDate) ?? text(row.published) ?? text(row.updated) ?? text(row["dc:date"]));
+  if (!title || !link || !publishedAt) return `Skipped feed item "${title || "(untitled)"}": missing ${[!title && "title", !link && "link", !publishedAt && "date"].filter(Boolean).join(", ")}`;
+  let url = link;
+  try {
+    url = new URL(link, feedUrl).toString();
+  } catch {
+    /* keep as is */
+  }
+  const body = stripHtml(text(row.description) ?? text(row.summary) ?? text(row.content) ?? text(row["content:encoded"]));
+  const category = asArray(row.category as unknown).map((c) => text(c)).filter((c): c is string => Boolean(c));
+  return { externalId: text(row.guid) ?? text(row.id), url, title, text: body, publishedAt, language: null, raw: row, lead: body, hints: category };
+}
+
 export function parseFeed(xml: string, feedUrl: string): { items: FetchedItem[]; itemErrors: string[] } {
   let doc: Record<string, unknown>;
   try {
@@ -44,21 +61,9 @@ export function parseFeed(xml: string, feedUrl: string): { items: FetchedItem[];
   const items: FetchedItem[] = [];
   const itemErrors: string[] = [];
   for (const row of rows) {
-    const title = stripHtml(text(row.title));
-    const link = text(row.link) && typeof row.link !== "object" ? text(row.link) : atomLink(row.link) ?? text(row.guid);
-    const publishedAt = parseDate(text(row.pubDate) ?? text(row.published) ?? text(row.updated) ?? text(row["dc:date"]));
-    if (!title || !link || !publishedAt) {
-      itemErrors.push(`Skipped feed item "${title || "(untitled)"}": missing ${[!title && "title", !link && "link", !publishedAt && "date"].filter(Boolean).join(", ")}`);
-      continue;
-    }
-    let url = link;
-    try {
-      url = new URL(link, feedUrl).toString();
-    } catch {
-      /* keep as is */
-    }
-    const body = stripHtml(text(row.description) ?? text(row.summary) ?? text(row.content) ?? text(row["content:encoded"]));
-    items.push({ externalId: text(row.guid) ?? text(row.id), url, title, text: body, publishedAt, language: null, raw: row });
+    const r = rssRowToItem(row, feedUrl);
+    if (typeof r === "string") itemErrors.push(r);
+    else items.push(r);
   }
   if (rows.length > 0 && items.length === 0) throw new IngestionError(`Feed has ${rows.length} items but none had title/link/date — format not supported`, null, "SCHEMA_MISMATCH");
   return { items, itemErrors };

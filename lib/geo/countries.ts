@@ -43,7 +43,7 @@ KM|Comoros|-11.9|43.9|
 CG|Congo|-0.2|15.8|Republic of the Congo;Congo-Brazzaville
 CD|Democratic Republic of the Congo|-4.0|21.8|DRC;DR Congo;Congo-Kinshasa;Dem. Rep. Congo
 CR|Costa Rica|9.7|-83.8|
-CI|Côte d'Ivoire|7.5|-5.5|Cote d'Ivoire;Ivory Coast
+CI|Côte d'Ivoire|7.5|-5.5|Cote d'Ivoire;Côte d’Ivoire;Cote d’Ivoire;Ivory Coast
 HR|Croatia|45.1|15.2|
 CU|Cuba|21.5|-77.8|
 CY|Cyprus|35.1|33.4|
@@ -90,7 +90,7 @@ KZ|Kazakhstan|48.0|66.9|
 KE|Kenya|-0.0|37.9|
 KW|Kuwait|29.3|47.5|
 KG|Kyrgyzstan|41.2|74.8|
-LA|Laos|19.9|102.5|Lao People's Democratic Republic
+LA|Laos|19.9|102.5|Lao People's Democratic Republic;Lao People’s Democratic Republic;Lao PDR
 LV|Latvia|56.9|24.6|
 LB|Lebanon|33.9|35.9|
 LS|Lesotho|-29.6|28.2|
@@ -119,7 +119,7 @@ NZ|New Zealand|-40.9|174.9|
 NI|Nicaragua|12.9|-85.2|
 NE|Niger|17.6|8.1|
 NG|Nigeria|9.1|8.7|
-KP|North Korea|40.3|127.5|Democratic People's Republic of Korea;DPRK
+KP|North Korea|40.3|127.5|Democratic People's Republic of Korea;Democratic People’s Republic of Korea;DPRK
 MK|North Macedonia|41.6|21.7|
 NO|Norway|60.5|8.5|
 OM|Oman|21.5|55.9|
@@ -190,6 +190,15 @@ export const countryName = (code: string) => BY_CODE.get(code)?.name ?? code;
 const AMBIGUOUS = new Set(["Georgia", "Chad", "Jordan", "Turkey"]);
 
 interface Matcher { code: string; term: string; re: RegExp }
+
+/** Geographic/biological phrases that contain a country name but are not that country. */
+const NOT_A_COUNTRY_AFTER: Record<string, string> = {
+  Congo: "(?!\\s+(basin|river|rainforest|red|crimean))",
+  Guinea: "(?!\\s+(worm|pig|fowl)s?)",
+  Niger: "(?!\\s+(delta|river))",
+  Jordan: "(?!\\s+river)",
+  Chad: "(?!\\s+basin)",
+};
 let matchers: Matcher[] | null = null;
 function getMatchers(): Matcher[] {
   if (matchers) return matchers;
@@ -198,7 +207,7 @@ function getMatchers(): Matcher[] {
     for (const term of [c.name, ...c.aliases]) {
       const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const flags = term.length <= 3 ? "" : "i"; // short codes (UK, USA, DRC) are case-sensitive
-      list.push({ code: c.code, term, re: new RegExp(`(?<![\\p{L}-])${escaped}(?![\\p{L}-])`, `u${flags}`) });
+      list.push({ code: c.code, term, re: new RegExp(`(?<![\\p{L}-]|lake\\s)${escaped}(?![\\p{L}-])${NOT_A_COUNTRY_AFTER[term] ?? ""}`, `u${flags}`) });
     }
   }
   // Longest terms first so "Democratic Republic of the Congo" wins over "Congo" and "Papua New Guinea" over "Guinea".
@@ -215,8 +224,10 @@ export function findCountries(text: string): string[] {
     if (!found) continue;
     if (AMBIGUOUS.has(m.term) && !/\b(country|government|ministry|republic)\b/i.test(text)) continue;
     hits.push({ code: m.code, index: found.index });
-    // Blank the match so a shorter alias ("Congo") cannot re-match inside a longer one already counted.
-    working = working.slice(0, found.index) + " ".repeat(found[0].length) + working.slice(found.index + found[0].length);
+    // Blank EVERY occurrence of the matched term so a shorter alias ("Congo", "Sudan", "Guinea") cannot re-match
+    // inside a longer name already counted ("Democratic Republic of the Congo", "South Sudan", "Papua New Guinea").
+    const all = new RegExp(m.re.source, `${m.re.flags}g`);
+    working = working.replace(all, (x) => " ".repeat(x.length));
   }
   const ordered = hits.sort((a, b) => a.index - b.index).map((h) => h.code);
   return [...new Set(ordered)];

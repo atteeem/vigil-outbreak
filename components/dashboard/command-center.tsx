@@ -240,7 +240,7 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
           ) : (
             <a href={i.url} target="_blank" rel="noreferrer" className="mt-0.5 line-clamp-2 text-xs leading-snug hover:text-accent">{i.title} <ExternalLink className="inline h-3 w-3" /></a>
           )}
-          <p className="mt-0.5 text-[10.5px] text-ink-faint">{i.countries.map((c) => c.name).join(", ") || "Location not stated"} · {i.diseases.length ? i.diseases.map((d) => d.name).join(", ") : "Unknown cause / unspecified"}</p>
+          <p className="mt-0.5 text-[10.5px] text-ink-faint">{i.countries.map((c) => c.name).join(", ") || "Location not stated"} · {i.diseases.length ? i.diseases.map((d) => d.name).join(", ") : i.unknownCause ? "Unknown cause (as reported)" : "Pathogen not specified"}</p>
         </li>
       ))}
     </ul>

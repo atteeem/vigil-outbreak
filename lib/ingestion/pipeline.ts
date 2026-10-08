@@ -4,7 +4,8 @@ import { hostname } from "node:os";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { canonicalizeUrl, shortSummary, titleHash } from "./normalize";
-import { extract, type DiseaseKeywords } from "./extract";
+import { extract, leadSentence, type DiseaseKeywords } from "./extract";
+import { classifyContent, CLASSIFIER_VERSION } from "./classify";
 import { matchOutbreak, type OutbreakCandidate } from "./match";
 import { fetchWhoDon } from "./adapters/who-don";
 import { fetchRss } from "./adapters/rss";
@@ -101,9 +102,16 @@ export function safeJson<T>(s: string | null | undefined, fallback: T): T {
 }
 
 /** Stores one fetched item. Returns "new" | "duplicate". Exported for tests. */
+/** Extraction + classification for one item (shared by ingestion and `npm run reprocess`). */
+export function deriveItem(item: Pick<FetchedItem, "title" | "text" | "url" | "publishedAt" | "lead" | "hints">, adapter: string, keywords: DiseaseKeywords[]) {
+  const x = extract(item.title, item.text, item.publishedAt, keywords, { lead: item.lead });
+  const c = classifyContent({ title: item.title, url: item.url, lead: leadSentence(item.lead ?? item.text), adapter, hints: item.hints, diseaseSlugs: x.diseaseSlugs, countryCodes: x.countryCodes, unknownCause: x.unknownCause });
+  return { x, c };
+}
+
 export async function storeItem(
   item: FetchedItem,
-  source: { id: string; kind: string },
+  source: { id: string; kind: string; adapter?: string },
   runId: string | null,
   ctx: { keywords: DiseaseKeywords[]; candidates: OutbreakCandidate[] },
 ): Promise<"new" | "duplicate"> {
@@ -124,9 +132,11 @@ export async function storeItem(
     select: { id: true },
   });
 
-  const x = extract(item.title, item.text, item.publishedAt, ctx.keywords);
+  const { x, c } = deriveItem(item, source.adapter ?? "RSS", ctx.keywords);
   const sourceType = source.kind === "OFFICIAL" ? "OFFICIAL" : "MEDIA";
-  const suggestedOutbreakId = matchOutbreak(x, ctx.candidates);
+  // Guidance, podcasts, corporate and general publications are kept and visible on request, but are never
+  // associated with an outbreak and never produce case-count claims.
+  const suggestedOutbreakId = c.outbreakRelevant ? matchOutbreak(x, ctx.candidates) : null;
   const summary = item.text ? shortSummary(item.text) : null;
 
   // The unique keys (canonicalUrl; sourceId+externalId) make the insert itself idempotent: if another process stored
@@ -147,6 +157,10 @@ export async function storeItem(
       eventDate: x.eventDate,
       ingestionRunId: runId,
       countryCodes: JSON.stringify(x.countryCodes),
+      mentionedCountryCodes: JSON.stringify(x.mentionedCountryCodes),
+      contentType: c.contentType,
+      outbreakRelevant: c.outbreakRelevant,
+      classifierVersion: CLASSIFIER_VERSION,
       diseaseSlugs: JSON.stringify(x.diseaseSlugs),
       locationText: x.locationText,
       geoPrecision: x.geoPrecision,
@@ -165,6 +179,7 @@ export async function storeItem(
   }
   if (near) return "duplicate";
 
+  if (!c.outbreakRelevant) return "new";
   const claims: Prisma.EvidenceClaimCreateManyInput[] = x.counts.map((c) => ({
     articleId: article.id,
     claimType: claimTypeFor(c.metric),

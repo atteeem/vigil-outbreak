@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xml:base="https://www.ecdc.europa.eu/en" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>ECDC - RSS - Regression mix</title>
+    <link>https://www.ecdc.europa.eu/en</link>
+    <description></description>
+    <item>
+      <title>Surveillance of West Nile virus infections in humans and animals in Europe, weekly update</title>
+      <link>https://www.ecdc.europa.eu/en/infectious-disease-topics/west-nile-virus-infection/surveillance/rv-weekly-update</link>
+      <description>&lt;p&gt;Since the beginning of the 2026 transmission season and as of 1 October 2026, EU/EEA countries reported 512 locally acquired human cases of West Nile virus infection, including 41 deaths. Cases were reported by Italy, Greece, Romania and Hungary.&lt;/p&gt;</description>
+      <pubDate>Fri, 02 Oct 2026 14:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-1 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Epidemiological update: West-Nile fever in Italy</title>
+      <link>https://www.ecdc.europa.eu/en/news-events/rv-epi-update-wnf-italy</link>
+      <description>&lt;p&gt;Italy reported 23 new locally acquired cases of West-Nile fever in the past week.&lt;/p&gt;</description>
+      <pubDate>Thu, 01 Oct 2026 11:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-2 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Communicable disease threats report, 27 September - 3 October 2026, week 40</title>
+      <link>https://www.ecdc.europa.eu/en/publications-data/rv-cdtr-week-40</link>
+      <description>&lt;p&gt;This week's report covers West Nile virus, avian influenza A(H5N1) and mpox.&lt;/p&gt;</description>
+      <pubDate>Fri, 02 Oct 2026 16:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-3 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Epi Pulse podcast – Episode 12: Preparing for the respiratory virus season</title>
+      <link>https://www.ecdc.europa.eu/en/podcasts/rv-epi-pulse-12</link>
+      <description>&lt;p&gt;In this episode experts discuss influenza, COVID-19 and RSV vaccination ahead of winter.&lt;/p&gt;</description>
+      <pubDate>Wed, 30 Sep 2026 08:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-4 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Guidance on the prevention of West Nile virus transmission through substances of human origin</title>
+      <link>https://www.ecdc.europa.eu/en/publications-data/rv-wnv-soho-guidance</link>
+      <description>&lt;p&gt;This guidance supports blood services in areas with West Nile virus transmission, including in Italy and Greece.&lt;/p&gt;</description>
+      <pubDate>Tue, 29 Sep 2026 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-5 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Operational tool on rapid risk assessment methodology</title>
+      <link>https://www.ecdc.europa.eu/en/publications-data/rv-rra-methodology</link>
+      <description>&lt;p&gt;A methodological tool for public health professionals.&lt;/p&gt;</description>
+      <pubDate>Mon, 28 Sep 2026 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-6 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Annual Epidemiological Report for 2024: Legionnaires’ disease</title>
+      <link>https://www.ecdc.europa.eu/en/publications-data/rv-aer-legionnaires-2024</link>
+      <description>&lt;p&gt;In 2024, 30 EU/EEA countries reported 11 000 cases of Legionnaires’ disease.&lt;/p&gt;</description>
+      <pubDate>Mon, 28 Sep 2026 09:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-7 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Call for tenders: provision of laboratory services for the EU reference laboratory network</title>
+      <link>https://www.ecdc.europa.eu/en/about-us/procurement/rv-tender</link>
+      <description>&lt;p&gt;ECDC launches an open procedure.&lt;/p&gt;</description>
+      <pubDate>Fri, 25 Sep 2026 09:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-8 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>European Antibiotic Awareness Day 2026: save the date</title>
+      <link>https://www.ecdc.europa.eu/en/news-events/rv-eaad-2026</link>
+      <description>&lt;p&gt;Join the campaign in November.&lt;/p&gt;</description>
+      <pubDate>Thu, 24 Sep 2026 09:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-9 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Rapid risk assessment: Locally acquired dengue cases in France and Spain</title>
+      <link>https://www.ecdc.europa.eu/en/publications-data/rv-rra-dengue</link>
+      <description>&lt;p&gt;France and Spain reported clusters of locally acquired dengue in September 2026.&lt;/p&gt;</description>
+      <pubDate>Wed, 23 Sep 2026 09:00:00 +0000</pubDate>
+      <guid isPermaLink="false">rv-10 at https://www.ecdc.europa.eu</guid>
+    </item>
+  </channel>
+</rss>

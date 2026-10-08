@@ -2,7 +2,7 @@
 // is ordered newest-first and pages correctly. Stores nothing. Used by `npm run verify:sources` and tests.
 import { fetchText, parseJson } from "./http";
 import { buildWhoDonUrl, parseWhoDon } from "./adapters/who-don";
-import { parseCdcContent } from "./adapters/cdc-content";
+import { fetchCdcPage, parseCdcContent } from "./adapters/cdc-content";
 import { parseFeed } from "./adapters/rss";
 import { IngestionError, type FetchedItem } from "./types";
 import { FAILURE_HINT, FAILURE_LABEL, type FailureKind } from "./errors";
@@ -27,6 +27,8 @@ export interface VerificationResult {
   newest: string | null;
   checks: Check[];
   sample: { title: string; publishedAt: string; url: string }[];
+  /** On format errors: the actual response shape or body excerpt, so the adapter can be fixed from evidence. */
+  responseSample: string | null;
   checkedAt: string;
   durationMs: number;
 }
@@ -47,8 +49,8 @@ async function fetchPage(adapter: string, url: string): Promise<{ status: number
     return { status: r.status, items: p.items, itemErrors: p.itemErrors };
   }
   if (adapter === "CDC_CONTENT_API") {
-    const r = await fetchText(url, "application/json");
-    const p = parseCdcContent(parseJson(r.body, r.status, "CDC Content Services"));
+    const r = await fetchCdcPage(url);
+    const p = parseCdcContent(r.json);
     return { status: r.status, items: p.items, itemErrors: p.itemErrors };
   }
   if (adapter === "RSS") {
@@ -64,7 +66,7 @@ const keyOf = (i: FetchedItem) => i.externalId ?? i.url;
 export async function verifyEndpoint(slug: string, adapter: string, url: string, now = new Date()): Promise<VerificationResult> {
   const started = Date.now();
   const checks: Check[] = [];
-  const base: VerificationResult = { slug, adapter, url, verdict: "FAILED", failureKind: null, hint: null, httpStatus: null, itemCount: 0, newest: null, checks, sample: [], checkedAt: now.toISOString(), durationMs: 0 };
+  const base: VerificationResult = { slug, adapter, url, verdict: "FAILED", failureKind: null, hint: null, httpStatus: null, itemCount: 0, newest: null, checks, sample: [], responseSample: null, checkedAt: now.toISOString(), durationMs: 0 };
   const firstUrl = adapter === "WHO_DON_API" ? buildWhoDonUrl(url, 10, 0) : adapter === "CDC_CONTENT_API" ? withParams(url, { max: "10", pagenum: "1" }) : url;
 
   let page1: Awaited<ReturnType<typeof fetchPage>>;
@@ -73,7 +75,7 @@ export async function verifyEndpoint(slug: string, adapter: string, url: string,
   } catch (err) {
     const kind: FailureKind = err instanceof IngestionError ? err.kind : "UNKNOWN";
     checks.push({ name: "reachable", status: "FAIL", detail: `${FAILURE_LABEL[kind]} — ${(err as Error).message}` });
-    return { ...base, verdict: kind === "NETWORK_POLICY_BLOCKED" ? "BLOCKED_BY_NETWORK" : "FAILED", failureKind: kind, hint: FAILURE_HINT[kind], httpStatus: err instanceof IngestionError ? err.httpStatus : null, durationMs: Date.now() - started };
+    return { ...base, verdict: kind === "NETWORK_POLICY_BLOCKED" ? "BLOCKED_BY_NETWORK" : "FAILED", failureKind: kind, hint: FAILURE_HINT[kind], httpStatus: err instanceof IngestionError ? err.httpStatus : null, responseSample: err instanceof IngestionError ? err.detail : null, durationMs: Date.now() - started };
   }
   checks.push({ name: "reachable", status: "PASS", detail: `HTTP ${page1.status}` });
   checks.push({

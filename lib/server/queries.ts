@@ -154,12 +154,17 @@ export interface FeedItemDTO {
   reviewStatus: string;
   /** SEED | INGESTED | MANUAL — distinguishes hand-compiled seed data from automatically retrieved items. */
   origin: string;
+  /** lib/ingestion/classify.ts ContentType; outbreakRelevant=false for guidance, podcasts, corporate, general. */
+  contentType: string;
+  outbreakRelevant: boolean;
   outbreak: { slug: string; title: string } | null;
 }
 
-export async function listFeed(asOf: Date | null, filters: OutbreakFilters & { sourceType?: string | null } = {}, limit = 40): Promise<FeedItemDTO[]> {
+export async function listFeed(asOf: Date | null, filters: OutbreakFilters & { sourceType?: string | null; includeAllTypes?: boolean } = {}, limit = 40): Promise<FeedItemDTO[]> {
   const where: Prisma.SourceArticleWhereInput = {
     publishedAt: lte(asOf),
+    // Guidance, podcasts, corporate and general publications are excluded unless explicitly requested.
+    ...(filters.includeAllTypes ? {} : { outbreakRelevant: true }),
     // Public feed: analyst-accepted items, plus official publications awaiting review (labelled as such).
     // Media items are not shown until accepted; rejected and duplicate items never.
     OR: [{ reviewStatus: "ACCEPTED" }, { reviewStatus: "PENDING", sourceType: "OFFICIAL" }],
@@ -190,7 +195,10 @@ export async function listFeed(asOf: Date | null, filters: OutbreakFilters & { s
       fetchedAt: r.fetchedAt.toISOString(),
       countries: cc.map((code) => ({ code, name: countryName(code) })),
       diseases: ds.map((slug) => ({ slug, name: dName.get(slug) ?? slug })),
-      unknownCause: r.claims.length > 0 || ds.length === 0,
+      // "Unknown cause" only when the publication says so; no recognised disease is "pathogen not specified".
+      unknownCause: r.claims.length > 0,
+      contentType: r.contentType,
+      outbreakRelevant: r.outbreakRelevant,
       summary: r.summary,
       verificationStatus: r.verificationStatus,
       reviewStatus: r.reviewStatus,
@@ -248,7 +256,7 @@ export async function getDashboard(asOf: Date | null, filters: OutbreakFilters =
     listFeed(asOf, filters, 25),
     getFreshness(),
     prisma.sourceArticle.findMany({
-      where: { publishedAt: { gte: new Date(ref.getTime() - 30 * 86400_000), lte: ref }, reviewStatus: { in: ["ACCEPTED", "PENDING"] } },
+      where: { publishedAt: { gte: new Date(ref.getTime() - 30 * 86400_000), lte: ref }, reviewStatus: { in: ["ACCEPTED", "PENDING"] }, outbreakRelevant: true },
       select: { publishedAt: true, sourceType: true },
     }),
     prisma.outbreakUpdate.findMany({
@@ -389,7 +397,7 @@ export async function getAnalytics() {
     for (const k of keys) m.set(k, (m.get(k) ?? 0) + 1);
     return [...m.entries()].map(([key, value]) => ({ key, value })).sort((a, b) => b.value - a.value);
   };
-  const articles = await prisma.sourceArticle.findMany({ where: { reviewStatus: { in: ["ACCEPTED", "PENDING"] } }, select: { publishedAt: true, sourceType: true } });
+  const articles = await prisma.sourceArticle.findMany({ where: { reviewStatus: { in: ["ACCEPTED", "PENDING"] }, outbreakRelevant: true }, select: { publishedAt: true, sourceType: true } });
   const weekKey = (d: Date) => {
     const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
     t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
