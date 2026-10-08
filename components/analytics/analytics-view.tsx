@@ -56,7 +56,7 @@ export function AnalyticsView({ data }: { data: Data }) {
         <Panel title="Deaths where reported" testId="chart-deaths" note="Deaths as reported by the cited authority; attribution to the pathogen is shown on each outbreak page."><SeriesChart lines={lines(data.deaths)} testId="series-deaths" /></Panel>
         <Panel title="Investigation status distribution" testId="chart-status"><HBar data={data.status} colorFor={(k) => CLASSIFICATION_HEX[k as Classification] ?? "#888"} label={(k) => CLASSIFICATION_LABEL[k as Classification] ?? k} /></Panel>
         <Panel title="Disease categories (confirmed pathogens)" testId="chart-categories" note="“Unconfirmed” = no laboratory-confirmed causative agent."><HBar data={data.categories} /></Panel>
-        <Panel title="Geographic distribution" testId="chart-geography"><HBar data={data.geography} /></Panel>
+        <Panel title="Geographic distribution" testId="chart-geography"><HBar data={data.geography} label={(k) => k} /></Panel>
         <Panel title="Reporting history (publications per week)" testId="chart-reporting">
           {data.reporting.length === 0 ? <EmptyState title="No publications recorded" /> : (
             <div className="h-56">
