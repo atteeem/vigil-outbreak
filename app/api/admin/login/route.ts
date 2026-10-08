@@ -10,6 +10,15 @@ export async function POST(req: Request) {
   if (!body.ok) return body.res;
   if (!timingSafeEqual(body.data.password, expected)) return fail("Incorrect password.", 401);
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(ADMIN_SESSION_COOKIE, await createAdminSessionToken(), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 12 * 3600 });
+  // Secure only when the browser reached us over HTTPS (directly or via a TLS-terminating proxy). A Secure cookie
+  // sent over plain HTTP from any host but localhost (e.g. http://192.168.1.20:3000 or http://my-pc:3000 with
+  // `npm start`) is silently dropped by the browser, which made login loop back to the login page.
+  res.cookies.set(ADMIN_SESSION_COOKIE, await createAdminSessionToken(), { httpOnly: true, sameSite: "lax", secure: isHttps(req), path: "/", maxAge: 12 * 3600 });
   return res;
+}
+
+function isHttps(req: Request): boolean {
+  const forwarded = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  if (forwarded) return forwarded === "https";
+  return new URL(req.url).protocol === "https:";
 }

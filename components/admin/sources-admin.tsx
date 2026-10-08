@@ -12,8 +12,10 @@ interface Run { status: string; startedAt: string; itemsNew: number; itemsDuplic
 interface Source { id: string; slug: string; name: string; organization: string; kind: string; adapter: string; url: string | null; homepage: string | null; enabled: boolean; pollIntervalMinutes: number; lastFetchAt: string | null; lastSuccessAt: string | null; lastError: string | null; lastErrorKind: string | null; lastVerifiedAt: string | null; lastVerification: string | null; consecutiveFailures: number; endpointStatus: string; notes: string | null; runs: Run[]; _count: { articles: number } }
 interface RunResult { sourceName: string; status: string; itemsNew: number; itemsDuplicate: number; itemsFetched: number; error: string | null; failureKind?: string | null }
 
+const NO_URL_HINT = "No endpoint URL saved yet — paste the feed/API URL below and click Save to enable Test and Fetch.";
+
 function SourceRow({ s }: { s: Source }) {
-  const { run, busy, error, message } = useAction();
+  const { run, busy, error, message, setError } = useAction();
   const [url, setUrl] = useState(s.url ?? "");
   const [interval, setInterval] = useState(String(s.pollIntervalMinutes));
   const manual = s.adapter === "MANUAL";
@@ -35,13 +37,22 @@ function SourceRow({ s }: { s: Source }) {
             </p>
           )}
           {s.lastVerifiedAt && <p className="text-[11px] text-ink-faint" data-testid="source-last-verification">Last endpoint check {fmtUtc(s.lastVerifiedAt)}: {s.lastVerification}</p>}
+          {!manual && !s.url && <p className="text-[11px] text-warn" data-testid="source-no-url">{NO_URL_HINT}</p>}
           {s.notes && <p className="text-[11px] text-ink-dim">{s.notes}</p>}
         </div>
         {!manual && (
           <div className="flex flex-wrap gap-1.5">
-            <button className="btn" disabled={!!busy || !s.url} data-testid={`test-${s.slug}`} onClick={() => run<{ ok: boolean; items?: number; error?: string; label?: string }>("test", `/api/admin/sources/${s.id}/test`, "POST", undefined, (d) => (d.ok ? `Endpoint OK — ${d.items} items parsed (nothing stored).` : `Endpoint check failed — ${d.label}: ${d.error}`))}><Plug className="h-3 w-3" />{busy === "test" ? "Testing…" : "Test endpoint"}</button>
-            <button className="btn btn-accent" disabled={!!busy || !s.url} data-testid={`fetch-${s.slug}`} onClick={() => run<{ result: RunResult }>("fetch", `/api/admin/sources/${s.id}/fetch`, "POST", undefined, ({ result: r }) => `${r.status}: ${r.itemsFetched} fetched, ${r.itemsNew} new, ${r.itemsDuplicate} duplicates${r.error ? ` — ${r.error}` : ""}`)}><Download className="h-3 w-3" />{busy === "fetch" ? "Fetching…" : "Fetch now"}</button>
-            <button className="btn" disabled={!!busy} data-testid={`toggle-${s.slug}`} title={!s.enabled && s.endpointStatus !== "WORKING" ? "Requires a successful endpoint test first" : undefined} onClick={() => run("toggle", `/api/admin/sources/${s.id}`, "PATCH", { enabled: !s.enabled })}>{s.enabled ? "Disable" : "Enable"}</button>
+            <button className="btn" disabled={!!busy || !s.url} title={s.url ? undefined : NO_URL_HINT} data-testid={`test-${s.slug}`} onClick={async () => {
+              // A failed check is a normal 200 response; show it as an error, not as a success message.
+              const d = await run<{ ok: boolean; items?: number; error?: string; label?: string }>("test", `/api/admin/sources/${s.id}/test`, "POST", undefined, (d) => (d.ok ? `Endpoint OK — ${d.items} items parsed (nothing stored).` : ""));
+              if (d && !d.ok) setError(`Endpoint check failed — ${d.label}: ${d.error}`);
+            }}><Plug className="h-3 w-3" />{busy === "test" ? "Testing…" : "Test endpoint"}</button>
+            <button className="btn btn-accent" disabled={!!busy || !s.url} title={s.url ? undefined : NO_URL_HINT} data-testid={`fetch-${s.slug}`} onClick={async () => {
+              const fmt = (r: RunResult) => `${r.status}: ${r.itemsFetched} fetched, ${r.itemsNew} new, ${r.itemsDuplicate} duplicates${r.error ? ` — ${r.error}` : ""}`;
+              const d = await run<{ result: RunResult }>("fetch", `/api/admin/sources/${s.id}/fetch`, "POST", undefined, ({ result: r }) => (r.status === "FAILED" ? "" : fmt(r)));
+              if (d?.result.status === "FAILED") setError(fmt(d.result));
+            }}><Download className="h-3 w-3" />{busy === "fetch" ? "Fetching…" : "Fetch now"}</button>
+            <button className="btn" disabled={!!busy} data-testid={`toggle-${s.slug}`} title={!s.enabled && s.endpointStatus !== "WORKING" ? "Requires a successful endpoint test first" : undefined} onClick={() => run("toggle", `/api/admin/sources/${s.id}`, "PATCH", { enabled: !s.enabled }, () => (s.enabled ? "Disabled — no longer polled." : `Enabled — polled every ${s.pollIntervalMinutes} min while an ingestion process runs.`))}>{s.enabled ? "Disable" : "Enable"}</button>
           </div>
         )}
       </div>

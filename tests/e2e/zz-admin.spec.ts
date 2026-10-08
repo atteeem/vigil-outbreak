@@ -70,7 +70,7 @@ test.describe("ingestion via admin", () => {
 
     await page.reload();
     await page.getByTestId("fetch-e2e-down").click();
-    await expect(page.getByTestId("source-e2e-down").getByTestId("admin-message")).toContainText("FAILED", { timeout: 30_000 });
+    await expect(page.getByTestId("source-e2e-down").getByTestId("admin-error")).toContainText("FAILED", { timeout: 30_000 }); // shown as an error, not a success
     await page.reload();
     await expect(page.getByTestId("source-e2e-down").getByTestId("source-last-error")).toContainText("Publisher server error");
 

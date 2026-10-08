@@ -68,6 +68,19 @@ Real run on the owner's Windows PC: WHO DON + 11 ECDC feeds PIPELINE_VERIFIED; C
 - [x] Regression fixtures + 48 new tests (136 Vitest on SQLite and PostgreSQL; 25 Playwright); typecheck, lint, build
 - [ ] Re-run `npm run verify:sources` and send the CDC `responseSample` if it still fails
 
+## Milestone: Live Map and Sources UI verified in a real browser (2026-10-08)
+Reproduced with Playwright against a populated database (desktop 1600×1000 and Pixel 7), in dev and production mode:
+- [x] Map without WebGL2 crashed the whole Overview / Live Map page ("This page couldn't load"). Now a static SVG map shows the same markers, with click-to-select and filters, plus an explanatory note
+- [x] MapLibre worker failing to load left an empty map and no message. Now a 20 s watchdog shows the error and the fallback map
+- [x] Public MapLibre worker is now kept byte-identical to the installed `maplibre-gl` (`scripts/sync-maplibre-worker.mjs` on postinstall/predev/prebuild); `.gitattributes` stops Windows line-ending conversion in `public/`
+- [x] Two copies of `better-sqlite3` (unused 13.x at the top level, 12.x nested under Prisma's adapter, which the app actually loads). Now a single 12.11.1, pinned with `overrides`
+- [x] Production over plain HTTP from a LAN IP or PC name: the browser dropped the `Secure` session cookie, so login looped back to the sign-in page. The cookie is now `Secure` only on HTTPS
+- [x] Sources UI: a failed endpoint test or fetch showed in a green "success" box. It is now an error. Enable/Disable gives feedback, and rows without a URL explain why Test/Fetch are disabled
+- [x] New Playwright tests (map engine/assets/rendering, hover/click/selection, filters/timeline, no-WebGL and worker-failure fallbacks, mobile tap; Sources UI with real password login and DB assertions; end-to-end report → ingest → review → new outbreak → location → publish → open Live Map refresh). 35 Playwright, 136 Vitest, typecheck, lint, build
+- [x] Windows: in-place update procedure that keeps `dev.db` / `.env` and avoids a full reinstall (LOCAL_SETUP_WINDOWS.md §12), plus troubleshooting (§13)
+- [ ] Re-test on the owner's Windows PC (real browser and GPU, real WHO/ECDC network)
+- [ ] No UI to add a new source row (the 11 verified ECDC feeds must be pasted into the existing ECDC rows); decide whether to add one
+
 ## Next
 - [ ] Re-verify seeded facts against the original WHO/ECDC/Reuters pages once network access is available
 - [ ] Manual article entry form in admin (articles currently arrive via ingestion or seed)

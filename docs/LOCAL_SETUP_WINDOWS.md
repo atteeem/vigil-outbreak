@@ -55,7 +55,10 @@ npm ci
 - `better-sqlite3` downloads a prebuilt Windows binary during install, so it needs internet access to github.com.
   If that download is blocked, install *Visual Studio Build Tools (Desktop development with C++)* and run
   `npm install` again so it can compile.
-- `postinstall` runs `prisma generate` automatically.
+- `postinstall` runs `prisma generate` automatically, and copies MapLibre's worker into `public\` if it differs
+  from the installed version.
+- There is a single `better-sqlite3` (12.11.1, the version Prisma's adapter needs), so only one native binary is
+  installed (see §12).
 
 ## 4. Configure environment variables
 
@@ -225,32 +228,113 @@ npm run verify:sources
 ```powershell
 npm run typecheck
 npm run lint
-npm test                              # 88 unit + integration tests on a throwaway SQLite DB
+npm test                              # 136 unit + integration tests on a throwaway SQLite DB
 npx playwright install chromium       # once
-npm run test:e2e                      # 25 browser tests (desktop + mobile), own test DB and port 3100
+npm run test:e2e                      # 35 browser tests (desktop + mobile; Live Map, Sources UI, end-to-end workflow), own test DB and port 3100
 ```
 
 With a local PostgreSQL (optional; for example installed via `winget install PostgreSQL.PostgreSQL.16`):
 
 ```powershell
 $env:TEST_DATABASE_URL = "postgresql://postgres:YOUR_PASSWORD@localhost:5432/vigil_test"   # create the DB first
-npm run test:pg                       # same 88 tests on PostgreSQL; restores the SQLite client afterwards
+npm run test:pg                       # same 136 tests on PostgreSQL; restores the SQLite client afterwards
 ```
 
 ## 12. Updating an existing installation (keeps your data)
 
+Your database (`prisma\dev.db`) and settings (`.env`) are ignored by Git, so updating the code never replaces
+them. Update **in place**, in the folder you already use. Do not clone into a new folder and do not run `npm ci`,
+because `npm ci` deletes `node_modules` and reinstalls everything.
+
 ```powershell
 cd C:\dev\vigil-outbreak
-git pull                                  # or clone the new bundle into a new folder and copy prisma\dev.db + .env over
-npm ci
-npx prisma migrate deploy                 # adds the new columns; existing rows are copied, nothing is deleted
-npm run db:reference                      # adds/refreshes diseases (e.g. West Nile); touches nothing else
-npm run reprocess                         # DRY RUN: lists how stored ingested articles would be re-derived
-npm run reprocess -- --apply              # apply (never deletes; keeps review/verification/analyst links/claims)
-npm run verify:sources                    # re-run the real-source check
+# Stop the dev server / worker first (Ctrl+C in their windows).
+
+# 1. Back up the data (a copy, never moved).
+$stamp = Get-Date -Format yyyyMMdd-HHmm
+New-Item -ItemType Directory -Force backups | Out-Null
+Copy-Item prisma\dev.db "backups\dev.db.$stamp"
+Copy-Item .env "backups\.env.$stamp"
+
+# 2. Keep a copy of the SQLite native binding that already works on this PC (see the note below).
+$nested = "node_modules\@prisma\adapter-better-sqlite3\node_modules\better-sqlite3\build\Release\better_sqlite3.node"
+if (Test-Path $nested) { Copy-Item $nested "backups\better_sqlite3.node.$stamp" }
+
+# 3. Get the new commits. From a bundle:
+$bundle = "$env:USERPROFILE\Downloads\vigil-outbreak.bundle"
+git bundle verify $bundle
+git fetch $bundle main:refs/remotes/bundle/main
+git merge --ff-only bundle/main            # or: git pull   (if you use the GitHub remote)
+git status --short                          # dev.db / .env never appear here: they are not tracked
+
+# 4. Update only what changed (no full reinstall).
+npm install                                 # also runs: prisma generate + MapLibre worker sync
+npx prisma migrate deploy                   # applies new migrations only; never deletes rows
 ```
 
-`npm run db:seed` is also safe now: if the seeded outbreaks already exist it keeps them as they are.
+Then check that the SQLite binding loads and your data is still there. Both commands are read-only:
+
+```powershell
+node -e "const D=require('better-sqlite3'); const db=new D('prisma/dev.db',{readonly:true}); console.log(db.prepare('select (select count(*) from Outbreak) outbreaks, (select count(*) from SourceArticle) articles, (select count(*) from Source) sources').get())"
+npm run dev
+```
+
+**About the native SQLite binding (`better-sqlite3`).** Until commit `3a03df5`, the project had two copies of
+`better-sqlite3`. A 13.x copy sat at the top level, unused. A 12.x copy was nested under
+`@prisma\adapter-better-sqlite3\node_modules`, and that is the one the app actually loads. Each copy needs its
+own Windows binary, which is why the nested one caused problems. There is now exactly one copy, `12.11.1`, in
+`node_modules\better-sqlite3`, the same version the Prisma adapter requires. An npm `overrides` entry keeps it
+that way. `npm install` downloads the prebuilt Windows binary for it.
+
+If `npm install` reports a better-sqlite3 build error, or the check above says *Could not locate the bindings
+file*, reuse the binary from step 2. It is the same version, so it is compatible:
+
+```powershell
+New-Item -ItemType Directory -Force node_modules\better-sqlite3\build\Release | Out-Null
+Copy-Item (Get-ChildItem backups\better_sqlite3.node.* | Sort-Object Name | Select-Object -Last 1).FullName node_modules\better-sqlite3\build\Release\better_sqlite3.node
+```
+
+Only if neither works, run `npm rebuild better-sqlite3`. That needs Visual Studio Build Tools, see §3.
+
+To roll back, stop the server, then run `git reset --hard <previous commit>` and `npm install`. If needed,
+restore the backups with `Copy-Item backups\dev.db.<stamp> prisma\dev.db`.
+
+Other optional upgrade steps from earlier milestones are still safe to run at any time:
+`npm run db:reference` (adds/refreshes diseases), `npm run reprocess` (dry run) and
+`npm run reprocess -- --apply`. `npm run db:seed` is also safe: it keeps existing seeded outbreaks as they are.
+
+## 13. If the Live Map or the Sources page does not work
+
+**Live Map**
+
+| What you see | Cause | What to do |
+|---|---|---|
+| A yellow note *"Simplified map: this browser has no WebGL2 …"* and a flat map | The browser has no WebGL2. Common causes: hardware acceleration is off, the GPU driver is blocklisted, or this is a Remote Desktop/VM session. Recent Chrome and Edge versions no longer fall back to software WebGL. | Markers, selection and filters still work. For the interactive map, open `edge://settings/system` or `chrome://settings/system`, turn on *Use graphics acceleration when available* and restart the browser. `chrome://gpu` should then show *WebGL2: Hardware accelerated*. Updating the GPU driver also helps. |
+| *"Simplified map: the map engine did not start …"* | The MapLibre worker (`/maplibre-gl-worker.mjs`) could not load. Antivirus or proxy filtering, or an outdated copy, can cause this. | Run `node scripts/sync-maplibre-worker.mjs --check`. If it reports a mismatch, run it without `--check`. Then open http://localhost:3000/maplibre-gl-worker.mjs. It must return JavaScript. |
+| *"Basemap geometry failed to load"* | `/geo/countries-50m.json` is blocked or damaged | Run `git status public` (it must be clean). Then run `git checkout -- public`. |
+| The map shows, but with no markers | Missing data, not a rendering problem | Open http://localhost:3000/api/dashboard. If `outbreaks` is empty, nothing is published yet. Run `npm run db:seed`, or publish an outbreak in the admin. |
+| The whole page shows an error | Usually the database (see the native-binding note in §12) | Read the error in the `npm run dev` window |
+
+Before this update, a browser without WebGL2 crashed the Overview and Live Map pages ("This page couldn't load"),
+and a worker that failed to load left the map empty with no message. Both cases now show the simplified map.
+
+**Sources (`/admin`)**
+
+- **Login keeps returning to the sign-in page.** With `npm start` (production mode), opening the site as
+  `http://<PC name or LAN IP>:3000` failed because the browser rejected the cookie, which was marked secure-only
+  over plain HTTP. This is fixed. The cookie is now marked secure only on HTTPS.
+- **Test endpoint / Fetch now are greyed out.** The source has no URL saved yet. The row says so. Paste the URL,
+  click **Save**, then **Test endpoint**.
+- **Enable is refused.** Enabling requires a passing **Test endpoint** after the last URL change. The red message
+  says so.
+- **Failures.** A failed test or fetch now shows in red with its failure class, and the row keeps the last error.
+  Previously a failed check appeared in a green box.
+- **The ECDC feeds you verified are not listed as sources.** `npm run verify:sources` ingests into a throwaway
+  database. It does not add sources. Put each feed URL you want into an ECDC row (*News* /
+  *Communicable disease threats report*), then click **Save → Test endpoint → Enable → Fetch now**.
+- **"Not live".** The indicator turns **Live** only after a real (non-localhost) source has succeeded recently
+  **and** an ingestion process is running. `npm run dev` counts. With `npm start`, also run `npm run worker`
+  (§7).
 
 ## What I need back from you
 

@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && node scripts/sync-maplibre-worker.mjs",
+    "predev": "node scripts/sync-maplibre-worker.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/sync-maplibre-worker.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -31,7 +33,7 @@
     "@prisma/adapter-better-sqlite3": "^7.10.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.11.1",
     "clsx": "^2.1.1",
     "fast-xml-parser": "^5.11.2",
     "lucide-react": "^1.46.0",
@@ -50,6 +52,7 @@
   "devDependencies": {
     "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4.3.3",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
@@ -64,5 +67,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "better-sqlite3": "$better-sqlite3"
   }
 }

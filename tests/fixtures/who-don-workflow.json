@@ -1,0 +1,14 @@
+{
+  "@odata.context": "https://www.who.int/api/news/$metadata#diseaseoutbreaknews",
+  "value": [
+    {
+      "Id": "fixture-wf-0001",
+      "DonId": "2026-DON-WF1",
+      "Title": "Fixture: Yellow fever - Peru",
+      "UrlName": "2026-DON-WF1",
+      "PublicationDate": "2026-10-07T15:00:00Z",
+      "Summary": "<p>On 3 October 2026, the Ministry of Health of Peru notified WHO of 6 suspected cases of yellow fever, including 2 deaths, in Iquitos, Loreto department. Laboratory confirmation is pending.</p>",
+      "Overview": "<p>Samples have been sent to the national reference laboratory. Vaccination status of the cases is being investigated.</p>"
+    }
+  ]
+}

@@ -13,8 +13,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Map as MapLibreMap, NavigationControl, Popup, config as maplibreConfig, type GeoJSONSource, type MapLayerMouseEvent, type StyleSpecification, type ExpressionSpecification } from "maplibre-gl";
-import { feature, mesh } from "topojson-client";
-import type { Topology, GeometryCollection } from "topojson-specification";
+import { loadGeography } from "./geography";
+import { FallbackMap } from "./fallback-map";
 import { CLASSIFICATION_HEX, CLASSIFICATION_LABEL, type Classification } from "@/lib/domain/enums";
 import { COUNTRIES } from "@/lib/geo/countries";
 import { citiesGeoJSON } from "@/lib/geo/cities";
@@ -24,6 +24,16 @@ import { Layers, Satellite } from "lucide-react";
 if (typeof window !== "undefined") {
   // Turbopack cannot resolve MapLibre's worker from import.meta.url (found in VIGIL); serve it from /public.
   maplibreConfig.WORKER_URL = "/maplibre-gl-worker.mjs";
+}
+
+const LOAD_TIMEOUT_MS = 20_000;
+
+function supportsWebGL2(): boolean {
+  try {
+    return !!document.createElement("canvas").getContext("webgl2");
+  } catch {
+    return false;
+  }
 }
 
 export interface MapMarker {
@@ -43,89 +53,6 @@ export type BasemapMode = "map" | "satellite";
 export const BASEMAP_PREF_KEY = "vigil-outbreak.basemap";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
-
-// world-atlas rings use d3's spherical (clockwise) winding; planar renderers need RFC 7946 winding (exterior
-// counter-clockwise), otherwise large polygons fill inside-out.
-function ringArea(ring: number[][]): number {
-  let a = 0;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j]![0]! - ring[i]![0]!) * (ring[j]![1]! + ring[i]![1]!);
-  return a / 2;
-}
-function rewindPolygon(rings: number[][][]): number[][][] {
-  return rings.map((r, i) => {
-    const ccw = ringArea(r) > 0;
-    return (i === 0) === ccw ? r : [...r].reverse();
-  });
-}
-/** Rings that cross the antimeridian (Russia's Chukotka, Fiji) jump from +180 to -180 and would draw a band
- * around the whole world in a planar projection: shift their western points by +360 so the ring stays continuous. */
-function unwrapPolygon(rings: number[][][]): number[][][] {
-  return rings.map((r) => {
-    const xs = r.map((c) => c[0]!);
-    if (Math.max(...xs) - Math.min(...xs) <= 180) return r;
-    return r.map(([x, y]) => [x! < 0 ? x! + 360 : x!, y!]);
-  });
-}
-function rewindCollection(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
-  // Antarctica legitimately spans every longitude and has no outbreak relevance; drop it rather than draw a cap.
-  fc.features = fc.features.filter((f) => (f.properties as { name?: string } | null)?.name !== "Antarctica");
-  for (const f of fc.features) {
-    const g = f.geometry;
-    if (g?.type === "Polygon") g.coordinates = unwrapPolygon(g.coordinates);
-    else if (g?.type === "MultiPolygon") g.coordinates = g.coordinates.map(unwrapPolygon);
-    if (g?.type === "Polygon") g.coordinates = rewindPolygon(g.coordinates);
-    else if (g?.type === "MultiPolygon") g.coordinates = g.coordinates.map(rewindPolygon);
-  }
-  return fc;
-}
-
-/** Splits mesh lines at antimeridian jumps (which would draw a horizontal line across the world) and drops
- * Antarctic coastline segments. */
-function cleanLines(g: GeoJSON.MultiLineString): GeoJSON.MultiLineString {
-  const out: number[][][] = [];
-  for (const line of g.coordinates) {
-    let cur: number[][] = [];
-    for (let i = 0; i < line.length; i++) {
-      const pt = line[i]!;
-      const prev = line[i - 1];
-      if (pt[1]! < -60 || (prev && Math.abs(pt[0]! - prev[0]!) > 180)) {
-        if (cur.length > 1) out.push(cur);
-        cur = pt[1]! < -60 ? [] : [pt];
-        continue;
-      }
-      cur.push(pt);
-    }
-    if (cur.length > 1) out.push(cur);
-  }
-  return { type: "MultiLineString", coordinates: out };
-}
-
-let geoPromise: Promise<{ land: GeoJSON.FeatureCollection; borders: GeoJSON.FeatureCollection }> | null = null;
-function loadGeography() {
-  geoPromise ??= fetch("/geo/countries-50m.json")
-    .then((r) => {
-      if (!r.ok) throw new Error(`basemap geometry HTTP ${r.status}`);
-      return r.json();
-    })
-    .then((topo: Topology) => {
-      const countries = topo.objects.countries as GeometryCollection;
-      const land = rewindCollection(feature(topo, countries) as unknown as GeoJSON.FeatureCollection);
-      const interior = cleanLines(mesh(topo, countries, (a, b) => a !== b));
-      const coast = cleanLines(mesh(topo, countries, (a, b) => a === b));
-      return {
-        land,
-        borders: { type: "FeatureCollection", features: [
-          { type: "Feature", properties: { kind: "border" }, geometry: interior },
-          { type: "Feature", properties: { kind: "coast" }, geometry: coast },
-        ] } as GeoJSON.FeatureCollection,
-      };
-    })
-    .catch((err) => {
-      geoPromise = null;
-      throw err;
-    });
-  return geoPromise;
-}
 
 const countryLabels: GeoJSON.FeatureCollection = {
   type: "FeatureCollection",
@@ -227,6 +154,8 @@ export function OutbreakMap({
   const [mode, setMode] = useState<BasemapMode>("map");
   const [geoError, setGeoError] = useState<string | null>(null);
   const [satError, setSatError] = useState(false);
+  // Set when the WebGL map cannot run; the SVG fallback then shows the same markers.
+  const [engineError, setEngineError] = useState<string | null>(null);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -241,7 +170,14 @@ export function OutbreakMap({
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const map = new MapLibreMap({
+    if (!supportsWebGL2()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- capability detected only in the browser
+      setEngineError("this browser has no WebGL2 (hardware acceleration is off, the GPU driver is blocked, or this is a remote desktop/VM session). Turn on \"Use graphics acceleration when available\" in the browser settings and restart it for the interactive map.");
+      return;
+    }
+    let map: MapLibreMap;
+    try {
+      map = new MapLibreMap({
       container: containerRef.current,
       style: buildStyle(),
       center: initialView.center,
@@ -253,19 +189,32 @@ export function OutbreakMap({
       renderWorldCopies: true,
       dragRotate: false,
       pitchWithRotate: false,
-    });
+      });
+    } catch (err) {
+      setEngineError(`the interactive map could not start (${(err as Error).message.slice(0, 160)}).`);
+      return;
+    }
     mapRef.current = map;
     map.touchZoomRotate.disableRotation();
     map.addControl(new NavigationControl({ showCompass: false }), "top-right");
     if (process.env.NODE_ENV !== "production") (window as unknown as { __outbreakMap?: MapLibreMap }).__outbreakMap = map;
     const popup = new Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: "260px" });
 
+    let lastError: string | null = null;
     map.on("error", (e) => {
       const src = (e as unknown as { sourceId?: string }).sourceId;
       if (src === "satellite") setSatError(true);
+      else lastError = e.error?.message ?? String(e.error ?? "unknown error");
     });
+    // MapLibre never fires "load" if its worker (/maplibre-gl-worker.mjs + /maplibre-gl-shared.mjs) cannot start,
+    // which used to leave an empty map with no explanation.
+    const watchdog = window.setTimeout(() => {
+      if (map.loaded() || map.isStyleLoaded()) return;
+      setEngineError(`the map engine did not start within ${LOAD_TIMEOUT_MS / 1000} s${lastError ? ` (${lastError.slice(0, 160)})` : " (its worker script /maplibre-gl-worker.mjs may be blocked or out of date)"}.`);
+    }, LOAD_TIMEOUT_MS);
 
     map.on("load", () => {
+      window.clearTimeout(watchdog);
       addOutbreakLayers(map);
       loadGeography()
         .then((g) => {
@@ -314,9 +263,10 @@ export function OutbreakMap({
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(containerRef.current);
     return () => {
+      window.clearTimeout(watchdog);
       ro.disconnect();
       popup.remove();
-      map.remove();
+      if (mapRef.current === map) map.remove();
       mapRef.current = null;
     };
     // initialView is intentionally read once at mount
@@ -357,9 +307,26 @@ export function OutbreakMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey, ready]);
 
+  useEffect(() => {
+    if (!engineError || !mapRef.current) return;
+    mapRef.current.remove();
+    mapRef.current = null;
+  }, [engineError]);
+
+  if (engineError) {
+    return (
+      <div className={cn("relative overflow-hidden bg-[#080b0f]", className)}>
+        <div ref={containerRef} className="h-full w-full" data-testid="outbreak-map" data-ready="true" data-renderer="svg" data-marker-count={markers.length} role="region" aria-label="World map of outbreaks and investigations">
+          <FallbackMap markers={markers} selectedSlug={selectedSlug} onSelect={onSelect} reason={engineError} view={initialView} />
+        </div>
+        {showLegend && <MapLegend />}
+      </div>
+    );
+  }
+
   return (
     <div className={cn("relative overflow-hidden bg-[#080b0f]", className)}>
-      <div ref={containerRef} className="h-full w-full" data-testid="outbreak-map" data-ready={ready ? "true" : "false"} aria-label="Interactive world map of outbreaks and investigations" role="region" />
+      <div ref={containerRef} className="h-full w-full" data-testid="outbreak-map" data-ready={ready ? "true" : "false"} data-renderer="webgl" aria-label="Interactive world map of outbreaks and investigations" role="region" />
       <div className="pointer-events-auto absolute left-2 top-2 z-10 flex overflow-hidden rounded-md border border-line-strong bg-panel/90 text-[11px] backdrop-blur" role="radiogroup" aria-label="Basemap">
         {(["map", "satellite"] as const).map((m) => (
           <button key={m} role="radio" aria-checked={mode === m} onClick={() => setMode(m)} className={cn("flex items-center gap-1 px-2 py-1", mode === m ? "bg-raised text-ink" : "text-ink-dim hover:text-ink")} data-testid={`basemap-${m}`}>
