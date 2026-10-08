@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ExternalLink, Filter, RotateCcw } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import type { DashboardDTO, OutbreakDetailDTO, OutbreakSummaryDTO } from "@/lib/server/queries";
-import { OutbreakMap, type MapMarker } from "@/components/map/outbreak-map";
+import { OutbreakMap } from "@/components/map/outbreak-map";
+import { markersFor } from "@/lib/map/markers";
 import { DetailPanel } from "@/components/dashboard/detail-panel";
 import { TimelineControls } from "@/components/dashboard/timeline-controls";
 import { useTimeline } from "@/hooks/use-timeline";
@@ -37,22 +38,6 @@ function filtersToParams(f: DashboardFilters, asOf: Date | null): URLSearchParam
   return p;
 }
 
-/** One marker per outbreak site; an outbreak's sites closer than ~80 km are merged so a single investigation
- * (e.g. Irkutsk + Shelekhov) never reads as two separate events or a cluster of "2". */
-export function markersFor(outbreaks: readonly OutbreakSummaryDTO[]): MapMarker[] {
-  const out: MapMarker[] = [];
-  for (const o of outbreaks) {
-    const groups: { lat: number; lng: number; names: string[]; precision: string }[] = [];
-    for (const l of o.locations) {
-      const g = groups.find((x) => Math.hypot(x.lat - l.lat, (x.lng - l.lng) * Math.cos((l.lat * Math.PI) / 180)) < 0.75);
-      if (g) g.names.push(l.name);
-      else groups.push({ lat: l.lat, lng: l.lng, names: [l.name], precision: l.precision });
-    }
-    groups.forEach((g, i) => out.push({ id: `${o.id}-${i}`, slug: o.slug, title: o.title, classification: o.classification, lat: g.lat, lng: g.lng, precision: g.precision, locationName: g.names.join(" / "), confirmedCases: o.cases.confirmedCases }));
-  }
-  return out;
-}
-
 function Kpi({ label, value, sub, testId, tone }: { label: string; value: string; sub?: string; testId: string; tone?: "warn" | "ok" | "dim" }) {
   return (
     <div className="min-w-0 bg-panel px-4 py-2.5" data-testid={testId}>
@@ -73,7 +58,7 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
   const featured = initial.outbreaks.find((o) => o.featured)?.slug ?? null;
   const [selected, setSelected] = useState<string | null>(variant === "overview" ? featured : null);
   const [detail, setDetail] = useState<OutbreakDetailDTO | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ lng: number; lat: number; zoom: number; key: string } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const first = useRef(true);
@@ -115,17 +100,16 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
   }, [asOf, query]);
 
   useEffect(() => {
-    if (!selected) {
-      setDetail(null);
-      return;
-    }
+    if (!selected) return;
     const ctl = new AbortController();
-    setDetailLoading(true);
+    const key = `${selected}|${asOfIso}`;
     fetch(`/api/outbreaks/${selected}${asOfIso ? `?asOf=${encodeURIComponent(asOfIso)}` : ""}`, { signal: ctl.signal, cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setDetail(d))
-      .catch(() => undefined)
-      .finally(() => setDetailLoading(false));
+      .then((d) => {
+        setDetail(d);
+        setLoadedKey(key);
+      })
+      .catch(() => undefined);
     return () => ctl.abort();
   }, [selected, asOfIso]);
 
@@ -346,7 +330,7 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
         {/* Right */}
         <aside className="panel order-3 min-h-0 overflow-y-auto lg:max-h-full" aria-label="Selected event details">
           <div className="panel-head"><span className="eyebrow">Selected event</span>{selected && <button className="text-[10px] text-ink-faint hover:text-ink" onClick={() => setSelected(null)}>Clear</button>}</div>
-          <DetailPanel detail={detail} loading={detailLoading} asOf={asOfIso} />
+          <DetailPanel detail={selected ? detail : null} loading={!!selected && loadedKey !== `${selected}|${asOfIso}`} asOf={asOfIso} />
         </aside>
       </div>
 
@@ -372,7 +356,7 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
           </div>
         </div>
       )}
-      {variant === "map" && selected && detail && !detail.notYetReported && (
+      {variant === "map" && selected && detail && !detail.notYetReported && detail.slug === selected && (
         <p className="mt-2 text-[11px] text-ink-faint">Selected: <ClassificationBadge classification={detail.classification} /> {detail.title}</p>
       )}
     </main>

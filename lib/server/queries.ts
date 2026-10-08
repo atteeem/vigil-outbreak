@@ -345,7 +345,8 @@ export async function getOutbreakDetail(slug: string, asOf: Date | null) {
   };
 }
 
-export type OutbreakDetailDTO = Exclude<Awaited<ReturnType<typeof getOutbreakDetail>>, null>;
+export type OutbreakDetailResult = Exclude<Awaited<ReturnType<typeof getOutbreakDetail>>, null>;
+export type OutbreakDetailDTO = Extract<OutbreakDetailResult, { notYetReported: false }>;
 
 export async function getAnalytics() {
   const outbreaks = await prisma.outbreak.findMany({ where: { published: true, mergedIntoId: null }, include: { observations: true, disease: true, suspectedDisease: true } });
