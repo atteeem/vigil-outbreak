@@ -5,7 +5,7 @@ import { listFeed } from "@/lib/server/queries";
 import { readDashboardParams, one } from "@/lib/server/page-params";
 import { prisma } from "@/lib/db";
 import { COUNTRIES } from "@/lib/geo/countries";
-import { SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
+import { OriginBadge, SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
 import { Time } from "@/components/ui/time";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -21,7 +21,7 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   return (
     <main className="mx-auto max-w-[1100px] px-3 pb-12 pt-4 sm:px-4">
       <h1 className="text-xl font-semibold tracking-tight">Intelligence feed</h1>
-      <p className="mb-4 text-xs text-ink-dim">Ingested and analyst-entered publications. Official publications appear immediately (marked “awaiting review” until an analyst reviews them); media reports appear only after review. Each item keeps its original source.</p>
+      <p className="mb-4 text-xs text-ink-dim">Ingested and analyst-entered publications. Official publications appear immediately (marked “awaiting review” until an analyst reviews them); media reports appear only after review. Each item keeps its original source and is labelled “Seeded” (hand-compiled initial data) or “Auto-ingested” (retrieved by the pipeline).</p>
       <form method="get" className="panel mb-3 grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto]" role="search">
         <input name="q" defaultValue={filters.q} className="field" placeholder="Search headlines…" aria-label="Search" />
         <select name="disease" defaultValue={filters.disease} className="field" aria-label="Disease"><option value="">All pathogens</option><option value="unknown">Unknown cause / unspecified</option>{diseases.map((d) => <option key={d.slug} value={d.slug}>{d.name}</option>)}</select>
@@ -36,8 +36,9 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-faint">
                 <SourceTypeBadge type={i.sourceType} />
                 <VerificationBadge status={i.verificationStatus} />
+                <OriginBadge origin={i.origin} fetchedAt={i.fetchedAt} />
                 {i.reviewStatus === "PENDING" && <span className="rounded border border-warn/30 px-1.5 text-[10px] uppercase tracking-wide text-warn">awaiting review</span>}
-                <span className="text-ink-dim">{i.organization}</span>· <Time iso={i.publishedAt} />
+                <span className="text-ink-dim">{i.organization}</span>· published <Time iso={i.publishedAt} />{i.origin === "INGESTED" && <> · retrieved <Time iso={i.fetchedAt} /></>}
               </div>
               {i.outbreak ? (
                 <Link href={`/outbreaks/${i.outbreak.slug}`} className="mt-1 block text-[14px] font-medium leading-snug hover:text-accent">{i.title} <ArrowUpRight className="inline h-3.5 w-3.5" /></Link>

@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { useAction, Flash } from "./use-action";
-import { SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
+import { OriginBadge, SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
 import { fmtUtc, cn } from "@/lib/utils";
 import { METRICS, METRIC_LABEL } from "@/lib/domain/enums";
 
 interface Claim { id: string; claimType: string; text: string; metric: string | null; value: number | null; verificationStatus: string; conflictNote: string | null; sourceType: string }
-interface Article { id: string; title: string; url: string; summary: string | null; publishedAt: string; fetchedAt: string; eventDate: string | null; countryCodes: string; diseaseSlugs: string; locationText: string | null; geoPrecision: string; sourceType: string; verificationStatus: string; reviewStatus: string; suggestedOutbreakId: string | null; outbreakId: string | null; duplicateOfId: string | null; source: { name: string; kind: string }; claims: Claim[] }
+interface Article { id: string; title: string; url: string; summary: string | null; publishedAt: string; fetchedAt: string; eventDate: string | null; countryCodes: string; diseaseSlugs: string; locationText: string | null; geoPrecision: string; sourceType: string; verificationStatus: string; reviewStatus: string; origin: string; primaryValidatedAt: string | null; suggestedOutbreakId: string | null; outbreakId: string | null; duplicateOfId: string | null; source: { name: string; kind: string }; claims: Claim[] }
 type Outbreak = { id: string; title: string; slug: string };
 
 export function ClaimRow({ c, outbreaks, defaultOutbreak }: { c: Claim; outbreaks: Outbreak[]; defaultOutbreak: string | null }) {
@@ -51,7 +51,8 @@ function ArticleCard({ a, outbreaks }: { a: Article; outbreaks: Outbreak[] }) {
   return (
     <li className="panel p-4" data-testid="review-article">
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-faint">
-        <SourceTypeBadge type={a.sourceType} /><VerificationBadge status={a.verificationStatus} />
+        <SourceTypeBadge type={a.sourceType} /><VerificationBadge status={a.verificationStatus} /><OriginBadge origin={a.origin} />
+        {a.origin !== "INGESTED" && <span className={a.primaryValidatedAt ? "text-ok" : "text-warn"}>{a.primaryValidatedAt ? `checked vs primary ${fmtUtc(a.primaryValidatedAt, false)}` : "not yet checked vs primary"}</span>}
         <span className="text-ink-dim">{a.source.name}</span> · published {fmtUtc(a.publishedAt)} · fetched {fmtUtc(a.fetchedAt)}{a.eventDate ? ` · event date ${fmtUtc(a.eventDate, false)}` : ""}
       </div>
       <a href={a.url} target="_blank" rel="noreferrer" className="mt-1 block text-[14px] font-medium hover:text-accent">{a.title} <ExternalLink className="inline h-3 w-3" /></a>
@@ -71,6 +72,7 @@ function ArticleCard({ a, outbreaks }: { a: Article; outbreaks: Outbreak[] }) {
         </select>
         <button className="btn btn-accent" disabled={!!busy} data-testid="accept-article" onClick={() => run("a", `/api/admin/articles/${a.id}`, "PATCH", { action: "accept", outbreakId: target || null }, () => "Accepted.")}>Accept{target ? " & link" : ""}</button>
         <button className="btn btn-danger" disabled={!!busy} onClick={() => run("r", `/api/admin/articles/${a.id}`, "PATCH", { action: "reject" }, () => "Rejected.")}>Reject</button>
+        {a.origin !== "INGESTED" && <button className="btn" disabled={!!busy} data-testid="validate-primary" onClick={() => run("vp", `/api/admin/articles/${a.id}`, "PATCH", { action: a.primaryValidatedAt ? "unvalidate-primary" : "validate-primary" }, () => (a.primaryValidatedAt ? "Validation removed." : "Marked as checked against the primary publication."))}>{a.primaryValidatedAt ? "Undo primary check" : "Mark checked vs primary"}</button>}
         {a.reviewStatus !== "PENDING" && <button className="btn" disabled={!!busy} onClick={() => run("o", `/api/admin/articles/${a.id}`, "PATCH", { action: "reopen" })}>Reopen</button>}
         <select className="field w-auto" value={a.verificationStatus} onChange={(e) => run("v", `/api/admin/articles/${a.id}`, "PATCH", { action: "verify", verificationStatus: e.target.value })} aria-label="Article verification">
           {["UNVERIFIED", "VERIFIED", "DISPUTED", "RETRACTED"].map((v) => <option key={v} value={v}>{v.toLowerCase()}</option>)}

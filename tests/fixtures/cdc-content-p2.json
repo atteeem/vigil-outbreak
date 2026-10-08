@@ -1,0 +1,13 @@
+{
+  "meta": { "status": 200, "message": [], "pagination": { "total": 4, "count": 1, "max": 3, "offset": 3, "pageNum": 2, "totalPages": 2, "nextUrl": "" } },
+  "results": [
+    {
+      "id": 900004,
+      "name": "Fixture: Dengue in the Americas — situation summary",
+      "description": "Dengue activity remains elevated.",
+      "sourceUrl": "https://www.cdc.gov/fixture/dengue-americas.html",
+      "status": "Published",
+      "datePublished": "2026-09-28T12:00:00Z"
+    }
+  ]
+}

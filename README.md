@@ -24,7 +24,9 @@ Production: `npm run build && npm start`. Requires Node 22 or later.
 | Command | Purpose |
 | --- | --- |
 | `npm run ingest` / `npm run ingest -- --due` | One-shot ingestion of all enabled sources, or only those due (cron-friendly; exit code 2 if a source failed) |
-| `npm test` | Vitest: unit tests plus a DB-backed ingestion integration test (throwaway `prisma/vitest.db`) |
+| `npm run ingest:backfill` | Same, following up to 4 upstream pages per source |
+| `npm run verify:sources` | Live-source verification: reachability, schema, freshness, ordering, paging. Stores nothing; exit code 2 means blocked by network policy. See `docs/LIVE_SOURCE_VERIFICATION.md` |
+| `npm test` | Vitest: unit tests plus DB-backed integration tests of every adapter through the real pipeline (throwaway `prisma/vitest.db`) |
 | `npm run test:e2e` | Playwright, desktop and Pixel 7. Builds its own `prisma/test.db` and serves fixtures, so no external network is needed |
 | `npm run typecheck` / `npm run lint` | TypeScript / ESLint |
 
@@ -80,44 +82,73 @@ build environment.
 
 The flow is fetch, normalize, extract, associate, dedupe, store, then flag conflicts (`lib/ingestion/`).
 
-- **Adapters.** The WHO Disease Outbreak News OData API is `WHO_DON_API`, using the endpoint documented at
-  `who.int/api/news/diseaseoutbreaknews/sfhelp`. RSS and Atom feeds are `RSS`, for ECDC, CDC and others.
+- **Adapters.**
+  - `WHO_DON_API`: WHO Disease Outbreak News, a Sitefinity OData endpoint documented at
+    `who.int/api/news/diseaseoutbreaknews/sfhelp`. It pages with `$top`/`$skip` or `@odata.nextLink`.
+  - `CDC_CONTENT_API`: CDC Content Services v2 (`tools.cdc.gov/api/v2/resources/media`). Its schema comes from
+    CDC's API docs and published OpenAPI definition (`results[]`, `meta.pagination.nextUrl`).
+  - `RSS`: RSS 2.0, Atom and RDF, including ECDC's Drupal feeds. Relative links and non-permalink GUIDs are handled.
+  - All adapters fail loudly on a format change (`SCHEMA_MISMATCH`) instead of storing nothing quietly.
 - **Extraction** is deterministic and conservative. It picks out countries, cities, diseases, explicit dates and
   qualified counts. Everything extracted is stored as an **UNVERIFIED claim**. Only an analyst can promote a
   claim to an observation.
 - **Association** only *suggests* an outbreak (`suggestedOutbreakId`). The link is made when an analyst accepts it.
 - **Dedupe** works in three layers: canonical URL (a unique key), source plus external ID, and a title hash within
   ±3 days. Title-hash duplicates are kept as `DUPLICATE` for provenance and hidden from the feed.
-- **Persisted per item:** original URL, source organisation, publication time, event date, fetch time, extracted
-  claims, verification and review status, geographic precision and raw payload. Per run: HTTP status, counts and
-  errors.
-- **Failures** are recorded on the run and the source (last error, failure count, `FAILING`), with exponential
-  backoff. Nothing is ever substituted for missing data.
+- **Persisted per item:** original URL, source organisation, publication time, event date, fetch (retrieval)
+  time, **origin** (`INGESTED` / `SEED` / `MANUAL`), extracted claims, verification and review status, geographic
+  precision and raw payload. Per run: HTTP status, pages fetched, counts, errors and the **failure class**.
+- **Failures** are classified (`lib/ingestion/errors.ts`). A sandbox or firewall refusal (`NETWORK_POLICY_BLOCKED`,
+  source marked `BLOCKED`) is never confused with the publisher rejecting us (`HTTP_AUTH`), a moved endpoint
+  (`HTTP_NOT_FOUND`) or a format change (`SCHEMA_MISMATCH`). Failing sources back off exponentially. Nothing is
+  ever substituted for missing data.
+- **Enabling.** New sources are created disabled. An automatic source can be enabled only after **Test endpoint**
+  has observed a valid response.
 - **Scheduling.** `instrumentation.ts` starts an in-process scheduler that checks every 60 s which sources are due.
-  Each source has its own interval, defaulting to `INGESTION_INTERVAL_MINUTES=15`. Disable it with
-  `DISABLE_INGESTION_SCHEDULER=1` and use `npm run ingest` from cron instead.
+  Each source has its own interval, defaulting to `INGESTION_INTERVAL_MINUTES=15`. Alternatively, set
+  `DISABLE_INGESTION_SCHEDULER=1` and run `npm run ingest -- --due` from cron. `npm run ingest:backfill` reads 4
+  pages per source.
 - **Public visibility.** Official publications appear in the feed straight away, labelled "awaiting review".
   Media items appear only after an analyst accepts them.
 
-### Source status (verified 2026-10-08)
+### Freshness and trust
 
-| Source | Status |
-| --- | --- |
-| WHO DON API | Enabled. Adapter tested against the documented response format with fixtures. **Not reachable from the build sandbox:** its egress policy returned HTTP 403 for who.int, and this is recorded in the run log. It needs a live check on an unrestricted network: `/admin` → Test endpoint. |
-| ECDC CDTR / news RSS | Shipped **disabled with no URL**. The feed URLs could not be confirmed (ecdc.europa.eu was blocked). Paste the URL from ECDC's RSS page, Test it, then Enable. |
-| CDC HAN RSS | Disabled, URL not confirmed. |
-| CDC Travel Notices RSS | Disabled, candidate URL **unverified**. |
+- **The UI never claims to be live without evidence.** The nav indicator, the overview banner and the KPI
+  **Last successful live ingestion** are computed in `lib/domain/live-status.ts` from successes of real sources
+  only; localhost and fixture sources never count. "Live" requires a success within two polling intervals. If
+  every enabled source is failing, the UI says **Not live**, names the failure class, and states that the data
+  shown is seeded or previously retrieved.
+- **Every article is labelled Seeded or Auto-ingested** (feed, outbreak sources, admin review), and auto-ingested
+  items show when they were retrieved.
+- **Primary-source validation.** Facts that rest on hand-compiled (seed or manual) articles are listed on each
+  outbreak page under *Primary-source validation* until an analyst opens the original and clicks **Mark checked vs
+  primary** (`/admin/review?status=ACCEPTED`). The Irkutsk checklist is in
+  [`docs/IRKUTSK_VALIDATION.md`](docs/IRKUTSK_VALIDATION.md).
+- **Admin** (`/admin`) shows a live-ingestion health panel, per-source failure class with a remediation hint, the
+  last endpoint check, and a failure-class column in `/admin/logs`.
 
-The Live indicator in the nav shows **Live** only when the scheduler is running *and* a source succeeded within two
-polling intervals. Otherwise it shows Stale or Offline.
+### Source status (2026-10-08)
+
+| Source | Adapter | State | Live check |
+| --- | --- | --- | --- |
+| WHO Disease Outbreak News | `WHO_DON_API` | **Enabled** (endpoint documented by WHO) | **Blocked**: the build sandbox's egress proxy refused www.who.int (`x-deny-reason: host_not_allowed`). Not a WHO error. |
+| CDC Content Services (q=outbreak) | `CDC_CONTENT_API` | Disabled until a live test passes | Blocked by sandbox (tools.cdc.gov) |
+| ECDC News RSS | `RSS` | Disabled; candidate URL `…/taxonomy/term/1307/feed` from a third-party directory | Blocked by sandbox (www.ecdc.europa.eu) |
+| ECDC Communicable Disease Threats Report | `RSS` | Disabled; URL to copy from ECDC's RSS page | — |
+| CDC HAN | `RSS` | Disabled; URL not confirmed | — |
+| CDC Travel Notices | `RSS` | Disabled; candidate URL unverified | Blocked by sandbox (wwwnc.cdc.gov) |
+
+**No live integration has been observed succeeding yet.** To check from your own machine, follow
+[`docs/LIVE_SOURCE_VERIFICATION.md`](docs/LIVE_SOURCE_VERIFICATION.md) (`npm run verify:sources`). The sandbox
+evidence is in `docs/verification/2026-10-08-build-sandbox.json`.
 
 ## Seed data and provenance
 
 `prisma/seed.ts` loads sourced records: the Irkutsk investigation, Ebola (Bundibugyo virus) in DRC, Ebola in Uganda
 (resolved), mpox clade Ib in DRC, an A(H5N1) notification in Bangladesh, and yellow fever in Côte d'Ivoire. Every
 fact cites its publication. The direct sites were blocked during the build, so facts were compiled from search
-results of those publications. Media claims stay UNVERIFIED, and any time that was approximate is noted in the row.
-Re-verify against the originals once you have network access.
+results about those publications. These articles carry `origin = SEED`, media claims stay UNVERIFIED, and any time
+that was approximate is noted in the row. Re-seeding never overwrites an operator's source URL or enabled setting.
 
 ## Project layout
 

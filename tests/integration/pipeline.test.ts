@@ -134,7 +134,9 @@ describe("ingestion pipeline", () => {
     const past = await listFeed(new Date("2026-10-05T00:00:00Z"), {}, 200);
     expect(past.some((f) => f.title.startsWith("Fixture: Cholera"))).toBe(false);
     const dash = await getDashboard(null);
-    expect(dash.kpis.lastSuccessfulRefresh).not.toBeNull();
+    // Fixture servers (localhost) are not live sources: their successes never feed the public freshness claim.
+    expect(dash.kpis.lastSuccessfulRefresh).toBeNull();
+    expect(dash.live.state).not.toBe("LIVE");
   });
 });
 

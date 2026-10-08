@@ -14,3 +14,4 @@ next-env.d.ts
 lib/generated
 prisma/vitest.db*
 prisma/test.db*
+reports/

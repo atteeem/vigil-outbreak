@@ -34,13 +34,13 @@ export function parseFeed(xml: string, feedUrl: string): { items: FetchedItem[];
   try {
     doc = parser.parse(xml) as Record<string, unknown>;
   } catch (err) {
-    throw new IngestionError(`Feed is not valid XML: ${(err as Error).message}`);
+    throw new IngestionError(`Feed is not valid XML: ${(err as Error).message}`, null, "SCHEMA_MISMATCH");
   }
   const rss = doc.rss as { channel?: { item?: unknown } } | undefined;
   const feed = doc.feed as { entry?: unknown } | undefined;
   const rdf = doc["rdf:RDF"] as { item?: unknown } | undefined;
   const rows = (rss?.channel ? asArray(rss.channel.item) : feed ? asArray(feed.entry) : rdf ? asArray(rdf.item) : null) as Record<string, unknown>[] | null;
-  if (!rows) throw new IngestionError("Response is XML but not an RSS/Atom feed");
+  if (!rows) throw new IngestionError("Response is not an RSS/Atom feed (HTML page or wrong URL?)", null, "SCHEMA_MISMATCH");
   const items: FetchedItem[] = [];
   const itemErrors: string[] = [];
   for (const row of rows) {
@@ -60,10 +60,11 @@ export function parseFeed(xml: string, feedUrl: string): { items: FetchedItem[];
     const body = stripHtml(text(row.description) ?? text(row.summary) ?? text(row.content) ?? text(row["content:encoded"]));
     items.push({ externalId: text(row.guid) ?? text(row.id), url, title, text: body, publishedAt, language: null, raw: row });
   }
+  if (rows.length > 0 && items.length === 0) throw new IngestionError(`Feed has ${rows.length} items but none had title/link/date — format not supported`, null, "SCHEMA_MISMATCH");
   return { items, itemErrors };
 }
 
 export async function fetchRss(url: string): Promise<AdapterResult> {
   const { status, body } = await fetchText(url, "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9");
-  return { httpStatus: status, ...parseFeed(body, url) };
+  return { httpStatus: status, ...parseFeed(body, url), pages: 1 };
 }

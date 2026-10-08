@@ -10,6 +10,8 @@ const FILES: Record<string, { file: string; type: string }> = {
   "who-don-page2.json": { file: "who-don-page2.json", type: "application/json" },
   "ecdc.xml": { file: "ecdc.xml", type: "application/rss+xml" },
   "broken.json": { file: "broken.json", type: "application/json" },
+  "cdc-content.json": { file: "cdc-content-p1.json", type: "application/json" },
+  "ecdc-drupal.xml": { file: "ecdc-drupal.xml", type: "application/rss+xml" },
 };
 
 export async function GET(_req: Request, ctx: { params: Promise<{ name: string }> }) {

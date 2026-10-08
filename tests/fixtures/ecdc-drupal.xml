@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xml:base="https://www.ecdc.europa.eu/en" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>ECDC - RSS - News</title>
+    <link>https://www.ecdc.europa.eu/en</link>
+    <description></description>
+    <language>en</language>
+    <item>
+      <title>Fixture: ECDC closely monitoring situation following case of pneumonia of unknown origin in Russia</title>
+      <link>https://www.ecdc.europa.eu/en/news-events/fixture-pneumonia-unknown-origin-russia</link>
+      <description>&lt;p&gt;Based on the limited information available, there are no reports of secondary cases in Irkutsk.&lt;/p&gt;</description>
+      <pubDate>Tue, 06 Oct 2026 10:15:00 +0000</pubDate>
+      <dc:creator>ECDC</dc:creator>
+      <guid isPermaLink="false">90001 at https://www.ecdc.europa.eu</guid>
+    </item>
+    <item>
+      <title>Fixture: Weekly respiratory virus update</title>
+      <link>/en/news-events/fixture-respiratory-update</link>
+      <description>Relative link must be resolved against the feed URL.</description>
+      <pubDate>Fri, 02 Oct 2026 09:00:00 +0000</pubDate>
+      <guid isPermaLink="false">90002 at https://www.ecdc.europa.eu</guid>
+    </item>
+  </channel>
+</rss>

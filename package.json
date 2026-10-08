@@ -16,7 +16,9 @@
     "db:reset": "prisma migrate reset --force",
     "ingest": "tsx scripts/ingest.ts",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "verify:sources": "tsx scripts/verify-sources.ts",
+    "ingest:backfill": "tsx scripts/ingest.ts --pages 4"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.0",

@@ -22,15 +22,41 @@ test.describe("admin protection", () => {
 });
 
 test.describe("ingestion via admin", () => {
-  test("Fetch Now stores items, deduplicates on re-fetch, and logs failures", async ({ page, request }) => {
-    const create = await request.post("/api/admin/sources", { data: { slug: "e2e-who", name: "E2E WHO fixture", organization: "WHO (fixture)", kind: "OFFICIAL", adapter: "WHO_DON_API", url: "http://localhost:3100/api/test-fixtures/who-don.json", enabled: true } });
-    expect(create.status()).toBe(201);
-    await request.post("/api/admin/sources", { data: { slug: "e2e-down", name: "E2E failing", organization: "Nobody", kind: "OFFICIAL", adapter: "RSS", url: "http://localhost:3100/api/test-fixtures/error-500", enabled: true } });
+  test("sources start disabled and can only be enabled after a passing endpoint test", async ({ request }) => {
+    expect((await request.post("/api/admin/sources", { data: { slug: "e2e-early", name: "E2E enabled at creation", organization: "Fixture org", kind: "OFFICIAL", adapter: "RSS", url: "http://localhost:3100/api/test-fixtures/ecdc-drupal.xml", enabled: true } })).status()).toBe(422);
+    const created = await request.post("/api/admin/sources", { data: { slug: "e2e-gate", name: "E2E gate", organization: "Fixture org", kind: "OFFICIAL", adapter: "RSS", url: "http://localhost:3100/api/test-fixtures/error-500" } });
+    expect(created.status()).toBe(201);
+    const { source } = await created.json();
+    expect((await request.patch(`/api/admin/sources/${source.id}`, { data: { enabled: true } })).status()).toBe(422);
+    const test1 = await (await request.post(`/api/admin/sources/${source.id}/test`)).json();
+    expect(test1).toMatchObject({ ok: false, kind: "HTTP_SERVER" });
+    expect((await request.patch(`/api/admin/sources/${source.id}`, { data: { enabled: true } })).status()).toBe(422);
+    await request.patch(`/api/admin/sources/${source.id}`, { data: { url: "http://localhost:3100/api/test-fixtures/ecdc-drupal.xml" } });
+    const test2 = await (await request.post(`/api/admin/sources/${source.id}/test`)).json();
+    expect(test2).toMatchObject({ ok: true, items: 2 });
+    expect((await request.patch(`/api/admin/sources/${source.id}`, { data: { enabled: true } })).status()).toBe(200);
+    await request.patch(`/api/admin/sources/${source.id}`, { data: { enabled: false } });
+  });
+
+  test("Fetch Now stores items, deduplicates on re-fetch, and logs classified failures", async ({ page, request }) => {
+    const mk = async (slug: string, name: string, adapter: string, path: string) => {
+      const r = await request.post("/api/admin/sources", { data: { slug, name, organization: "fixture", kind: "OFFICIAL", adapter, url: `http://localhost:3100/api/test-fixtures/${path}` } });
+      expect(r.status()).toBe(201);
+      return (await r.json()).source.id as string;
+    };
+    const whoId = await mk("e2e-who", "E2E WHO fixture", "WHO_DON_API", "who-don.json");
+    const cdcId = await mk("e2e-cdc", "E2E CDC fixture", "CDC_CONTENT_API", "cdc-content.json");
+    await mk("e2e-down", "E2E failing", "RSS", "error-500");
+    for (const id of [whoId, cdcId]) {
+      expect((await (await request.post(`/api/admin/sources/${id}/test`)).json()).ok).toBe(true);
+      expect((await request.patch(`/api/admin/sources/${id}`, { data: { enabled: true } })).status()).toBe(200);
+    }
     // Disable the real WHO source so this test never depends on external network.
     const sources = (await (await request.get("/api/admin/sources")).json()).sources as { id: string; slug: string }[];
     await request.patch(`/api/admin/sources/${sources.find((s) => s.slug === "who-don")!.id}`, { data: { enabled: false } });
 
     await page.goto("/admin");
+    await expect(page.getByTestId("source-health")).toBeVisible();
     await page.getByTestId("fetch-e2e-who").click();
     await expect(page.getByTestId("admin-message").first()).toContainText("2 new", { timeout: 30_000 });
     await page.reload();
@@ -39,17 +65,39 @@ test.describe("ingestion via admin", () => {
 
     await page.getByTestId("fetch-all").click();
     const results = page.getByTestId("fetch-results");
-    await expect(results).toContainText("E2E failing: FAILED", { timeout: 30_000 });
-    await expect(results).toContainText("HTTP 500");
+    await expect(results).toContainText("E2E CDC fixture: PARTIAL · 2 fetched · 2 new", { timeout: 30_000 }); // PARTIAL: the archived item is logged, not stored
+    await expect(results).not.toContainText("E2E failing"); // disabled sources are not polled
+
+    await page.reload();
+    await page.getByTestId("fetch-e2e-down").click();
+    await expect(page.getByTestId("source-e2e-down").getByTestId("admin-message")).toContainText("FAILED", { timeout: 30_000 });
+    await page.reload();
+    await expect(page.getByTestId("source-e2e-down").getByTestId("source-last-error")).toContainText("Publisher server error");
 
     await page.goto("/admin/logs");
     await expect(page.getByTestId("runs-table")).toContainText("E2E failing");
-    await expect(page.getByTestId("runs-table")).toContainText("FAILED");
+    await expect(page.getByTestId("runs-table")).toContainText("Publisher server error (5xx)");
 
-    // Persisted and visible: official publication appears in the public feed, awaiting review.
+    // Persisted and visible: official publications appear in the public feed, labelled as auto-ingested.
     await page.goto("/intelligence?q=Fixture");
     await expect(page.getByTestId("feed-list")).toContainText("Fixture: Cholera");
+    await expect(page.getByTestId("feed-list")).toContainText("Fixture: Measles outbreak");
     await expect(page.getByTestId("feed-list")).toContainText("awaiting review");
+    await expect(page.getByTestId("feed-item").filter({ hasText: "Fixture: Measles" }).getByTestId("origin-badge")).toHaveText("Auto-ingested");
+
+    // Fixture successes are not live sources: the public UI still must not claim to be live.
+    await page.goto("/");
+    await expect(page.getByTestId("live-indicator")).not.toHaveAttribute("data-state", "live");
+  });
+
+  test("seeded articles can be marked as checked against the primary publication", async ({ page }) => {
+    await page.goto("/admin/review?status=ACCEPTED");
+    const card = page.getByTestId("review-article").filter({ hasText: "ECDC closely monitoring situation" });
+    await expect(card).toContainText("not yet checked vs primary");
+    await card.getByTestId("validate-primary").click();
+    await expect(card).toContainText("checked vs primary 20", { timeout: 10_000 });
+    await page.goto("/outbreaks/russia-irkutsk-2026");
+    await expect(page.getByTestId("section-sources")).toContainText("checked vs primary");
   });
 
   test("review: accepting links article; promoting a media claim never becomes a confirmed headline", async ({ page, request }) => {

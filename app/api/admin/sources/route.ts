@@ -29,6 +29,8 @@ export async function POST(req: Request) {
     const body = await parseBody(req, Create);
     if (!body.ok) return body.res;
     if (await prisma.source.findUnique({ where: { slug: body.data.slug } })) return fail("A source with this slug exists", 409);
+    // New automatic sources start disabled and UNTESTED; they are enabled after a successful endpoint test.
+    if (body.data.enabled && body.data.adapter !== "MANUAL") return fail("New sources are created disabled. Test the endpoint, then enable it.", 422);
     const source = await prisma.source.create({ data: body.data });
     await audit("source.create", "source", source.id, body.data);
     return json({ source }, 201);

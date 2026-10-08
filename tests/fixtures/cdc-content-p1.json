@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "status": 200,
+    "message": [],
+    "resultSet": { "id": "fixture" },
+    "pagination": { "total": 4, "count": 3, "max": 3, "offset": 0, "pageNum": 1, "totalPages": 2, "sort": "-datePublished", "previousUrl": "", "currentUrl": "/cdc-content?pagenum=1", "nextUrl": "/cdc-content?pagenum=2" }
+  },
+  "results": [
+    {
+      "id": 900001,
+      "name": "Fixture: Measles outbreak associated with international travel",
+      "description": "<p>CDC is aware of 14 confirmed cases of measles linked to international travel, including 2 hospitalized.</p>",
+      "mediaType": "Html",
+      "language": { "name": "English", "isoCode": "en" },
+      "source": { "name": "Centers for Disease Control and Prevention", "acronym": "CDC", "websiteUrl": "https://www.cdc.gov" },
+      "sourceUrl": "https://www.cdc.gov/fixture/measles-travel.html",
+      "targetUrl": "https://www.cdc.gov/fixture/measles-travel.html",
+      "persistentUrl": "https://tools.cdc.gov/api/embed/downloader/download.asp?m=900001",
+      "status": "Published",
+      "datePublished": "2026-10-05T14:00:00Z",
+      "dateModified": "2026-10-05T15:00:00Z",
+      "dateContentUpdated": "2026-10-05T15:00:00Z"
+    },
+    {
+      "id": 900002,
+      "name": "Fixture: Health Advisory — suspected plague exposure (Irkutsk, Russia)",
+      "description": "Clinicians should consider plague in travelers returning from Irkutsk Oblast with severe pneumonia. No cases have been confirmed in the United States.",
+      "mediaType": "Html",
+      "language": { "name": "English", "isoCode": "en" },
+      "sourceUrl": "https://www.cdc.gov/fixture/han-plague.html?utm_source=syndication",
+      "status": "Published",
+      "datePublished": "2026-10-04T18:30:00Z"
+    },
+    {
+      "id": 900003,
+      "name": "Fixture: Archived draft",
+      "sourceUrl": "https://www.cdc.gov/fixture/draft.html",
+      "status": "Archived",
+      "datePublished": "2026-10-03T00:00:00Z"
+    }
+  ]
+}

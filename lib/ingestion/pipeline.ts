@@ -7,7 +7,9 @@ import { extract, type DiseaseKeywords } from "./extract";
 import { matchOutbreak, type OutbreakCandidate } from "./match";
 import { fetchWhoDon } from "./adapters/who-don";
 import { fetchRss } from "./adapters/rss";
-import { IngestionError, type AdapterResult, type FetchedItem } from "./types";
+import { fetchCdcContent } from "./adapters/cdc-content";
+import { IngestionError, type AdapterResult, type FetchedItem, type FetchOptions } from "./types";
+import type { FailureKind } from "./errors";
 import { METRIC_LABEL, type Metric } from "@/lib/domain/enums";
 
 export type Trigger = "SCHEDULED" | "MANUAL" | "CLI" | "TEST";
@@ -22,17 +24,19 @@ export interface RunSummary {
   itemsDuplicate: number;
   itemsFailed: number;
   error: string | null;
+  failureKind: FailureKind | null;
 }
 
 const DUPLICATE_TITLE_WINDOW_MS = 3 * 24 * 3600_000;
 const g = globalThis as unknown as { __outbreakRunning?: Set<string> };
 const running = (g.__outbreakRunning ??= new Set<string>());
 
-async function runAdapter(adapter: string, url: string | null): Promise<AdapterResult> {
-  if (!url) throw new IngestionError("Source has no URL configured");
-  if (adapter === "WHO_DON_API") return fetchWhoDon(url);
+export async function runAdapter(adapter: string, url: string | null, opts: FetchOptions = {}): Promise<AdapterResult> {
+  if (!url) throw new IngestionError("Source has no URL configured", null, "CONFIG");
+  if (adapter === "WHO_DON_API") return fetchWhoDon(url, opts);
+  if (adapter === "CDC_CONTENT_API") return fetchCdcContent(url, opts);
   if (adapter === "RSS") return fetchRss(url);
-  throw new IngestionError(`Adapter ${adapter} does not fetch automatically`);
+  throw new IngestionError(`Adapter ${adapter} does not fetch automatically`, null, "CONFIG");
 }
 
 const claimTypeFor = (metric: Metric | null) =>
@@ -120,6 +124,7 @@ export async function storeItem(
       duplicateOfId: near?.id ?? null,
       suggestedOutbreakId,
       raw: JSON.stringify(item.raw).slice(0, 100_000),
+      origin: "INGESTED",
     },
   });
   if (near) return "duplicate";
@@ -162,10 +167,10 @@ export async function flagConflicts(articleId: string, outbreakId: string): Prom
   return flagged;
 }
 
-export async function runSource(sourceId: string, trigger: Trigger): Promise<RunSummary> {
+export async function runSource(sourceId: string, trigger: Trigger, opts: FetchOptions = {}): Promise<RunSummary> {
   const source = await prisma.source.findUnique({ where: { id: sourceId } });
   if (!source) throw new Error(`Unknown source ${sourceId}`);
-  const base: RunSummary = { runId: null, sourceId, sourceName: source.name, status: "SKIPPED", itemsFetched: 0, itemsNew: 0, itemsDuplicate: 0, itemsFailed: 0, error: null };
+  const base: RunSummary = { runId: null, sourceId, sourceName: source.name, status: "SKIPPED", itemsFetched: 0, itemsNew: 0, itemsDuplicate: 0, itemsFailed: 0, error: null, failureKind: null };
   if (source.adapter === "MANUAL") return { ...base, error: "Manual source: nothing to fetch" };
   if (running.has(sourceId)) return { ...base, error: "A fetch for this source is already running" };
   running.add(sourceId);
@@ -174,13 +179,15 @@ export async function runSource(sourceId: string, trigger: Trigger): Promise<Run
   try {
     let result: AdapterResult;
     try {
-      result = await runAdapter(source.adapter, source.url);
+      result = await runAdapter(source.adapter, source.url, opts);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const httpStatus = err instanceof IngestionError ? err.httpStatus : null;
-      await prisma.ingestionRun.update({ where: { id: run.id }, data: { status: "FAILED", finishedAt: now(), errorMessage: message, httpStatus } });
-      await prisma.source.update({ where: { id: sourceId }, data: { lastFetchAt: now(), lastError: message, consecutiveFailures: { increment: 1 }, endpointStatus: "FAILING" } });
-      return { ...base, runId: run.id, status: "FAILED", error: message };
+      const failureKind: FailureKind = err instanceof IngestionError ? err.kind : "UNKNOWN";
+      await prisma.ingestionRun.update({ where: { id: run.id }, data: { status: "FAILED", finishedAt: now(), errorMessage: message, httpStatus, failureKind } });
+      // BLOCKED = our network would not let us reach the publisher; it says nothing about the endpoint itself.
+      await prisma.source.update({ where: { id: sourceId }, data: { lastFetchAt: now(), lastError: message, lastErrorKind: failureKind, consecutiveFailures: { increment: 1 }, endpointStatus: failureKind === "NETWORK_POLICY_BLOCKED" ? "BLOCKED" : "FAILING" } });
+      return { ...base, runId: run.id, status: "FAILED", error: message, failureKind };
     }
     const ctx = await loadContext();
     const errors = [...result.itemErrors];
@@ -199,9 +206,9 @@ export async function runSource(sourceId: string, trigger: Trigger): Promise<Run
     const status = itemsFailed > 0 ? "PARTIAL" : "SUCCESS";
     await prisma.ingestionRun.update({
       where: { id: run.id },
-      data: { status, finishedAt: now(), httpStatus: result.httpStatus, itemsFetched: result.items.length, itemsNew, itemsDuplicate, itemsFailed, errors: JSON.stringify(errors.slice(0, 50)) },
+      data: { status, finishedAt: now(), httpStatus: result.httpStatus, itemsFetched: result.items.length, itemsNew, itemsDuplicate, itemsFailed, pagesFetched: result.pages ?? 1, errors: JSON.stringify(errors.slice(0, 50)) },
     });
-    await prisma.source.update({ where: { id: sourceId }, data: { lastFetchAt: now(), lastSuccessAt: now(), lastError: null, consecutiveFailures: 0, endpointStatus: "WORKING" } });
+    await prisma.source.update({ where: { id: sourceId }, data: { lastFetchAt: now(), lastSuccessAt: now(), lastError: null, lastErrorKind: null, consecutiveFailures: 0, endpointStatus: "WORKING" } });
     return { ...base, runId: run.id, status, itemsFetched: result.items.length, itemsNew, itemsDuplicate, itemsFailed };
   } finally {
     running.delete(sourceId);
@@ -219,9 +226,9 @@ export async function dueSources(at = new Date()) {
   });
 }
 
-export async function runAll(trigger: Trigger, opts: { onlyDue?: boolean } = {}): Promise<RunSummary[]> {
+export async function runAll(trigger: Trigger, opts: { onlyDue?: boolean } & FetchOptions = {}): Promise<RunSummary[]> {
   const sources = opts.onlyDue ? await dueSources() : await prisma.source.findMany({ where: { enabled: true, adapter: { not: "MANUAL" } } });
   const results: RunSummary[] = [];
-  for (const s of sources) results.push(await runSource(s.id, trigger));
+  for (const s of sources) results.push(await runSource(s.id, trigger, { maxPages: opts.maxPages }));
   return results;
 }

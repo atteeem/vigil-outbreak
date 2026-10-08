@@ -42,3 +42,14 @@ export function PathogenStatusText({ status, className }: { status: string; clas
   const color = status === "CONFIRMED" ? "text-ok" : status === "RULED_OUT" ? "text-ink-dim" : "text-warn";
   return <span className={cn(color, className)}>{PATHOGEN_STATUS_LABEL[status as PathogenStatus] ?? status}</span>;
 }
+
+/** Where a record came from: hand-compiled seed data, the automatic pipeline, or an analyst. */
+export function OriginBadge({ origin, fetchedAt, className }: { origin: string; fetchedAt?: string; className?: string }) {
+  const map: Record<string, { label: string; cls: string; title: string }> = {
+    SEED: { label: "Seeded", cls: "border-cls-suspected/40 text-cls-suspected", title: "Hand-compiled for the initial dataset (2026-10-08) from search results about the cited publication; not retrieved automatically." },
+    INGESTED: { label: "Auto-ingested", cls: "border-accent/40 text-accent", title: `Retrieved automatically by the ingestion pipeline${fetchedAt ? ` at ${fetchedAt}` : ""}.` },
+    MANUAL: { label: "Manual entry", cls: "border-line-strong text-ink-dim", title: "Entered by an analyst." },
+  };
+  const m = map[origin] ?? map.MANUAL!;
+  return <span title={m.title} data-testid="origin-badge" data-origin={origin} className={cn("inline-flex items-center rounded border px-1.5 py-px text-[10px] font-medium whitespace-nowrap", m.cls, className)}>{m.label}</span>;
+}

@@ -20,7 +20,7 @@ const SEEN_KEY = "vigil-outbreak.notifications.seen";
 interface StatusResponse {
   lastSuccessAt: string | null;
   lastAttemptAt: string | null;
-  sources: { enabled: boolean; endpointStatus: string; pollIntervalMinutes: number; lastError: string | null }[];
+  live: { state: "LIVE" | "STALE" | "DOWN" | "NOT_CONFIGURED"; label: string; detail: string; lastLiveSuccessAt: string | null };
   scheduler: { running: boolean };
 }
 
@@ -51,25 +51,16 @@ function useStatus() {
 
 function LiveIndicator() {
   const { status, now } = useStatus();
-  let state: "live" | "stale" | "offline" | "loading" = "loading";
+  // The state is computed server-side (lib/domain/live-status.ts) from real, non-fixture source successes only.
+  let state: "live" | "stale" | "down" | "offline" | "loading" = "loading";
+  let label = "…";
   let detail = "Checking ingestion status…";
   if (status) {
-    const enabled = status.sources.filter((s) => s.enabled);
-    const interval = Math.min(...enabled.map((s) => s.pollIntervalMinutes), 15);
-    const age = status.lastSuccessAt ? now - new Date(status.lastSuccessAt).getTime() : Infinity;
-    if (!status.scheduler.running || enabled.length === 0) {
-      state = "offline";
-      detail = !status.scheduler.running ? "Automatic ingestion is not running on this server." : "No automatic sources are enabled.";
-    } else if (age <= interval * 2 * 60_000) {
-      state = "live";
-      detail = `Last successful fetch ${relative(status.lastSuccessAt, now)}`;
-    } else {
-      state = "stale";
-      detail = status.lastSuccessAt ? `Last successful fetch ${relative(status.lastSuccessAt, now)}` : "No successful fetch yet";
-    }
+    state = ({ LIVE: "live", STALE: "stale", DOWN: "down", NOT_CONFIGURED: "offline" } as const)[status.live.state];
+    label = status.live.state === "LIVE" ? "Live" : status.live.state === "STALE" && status.live.lastLiveSuccessAt ? "Stale" : "Not live";
+    detail = `${status.live.detail}${status.live.lastLiveSuccessAt ? ` Last successful live ingestion ${relative(status.live.lastLiveSuccessAt, now)}.` : " No live ingestion has succeeded yet."}${status.scheduler.running ? "" : " (In-process scheduler not running.)"}`;
   }
-  const style = { live: "text-ok", stale: "text-warn", offline: "text-ink-faint", loading: "text-ink-faint" }[state];
-  const label = { live: "Live", stale: "Stale", offline: "Offline", loading: "…" }[state];
+  const style = { live: "text-ok", stale: "text-warn", down: "text-danger", offline: "text-ink-faint", loading: "text-ink-faint" }[state];
   return (
     <span data-testid="live-indicator" data-state={state} title={detail} className={cn("flex items-center gap-1.5 rounded-full border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", style)}>
       <span className={cn("h-1.5 w-1.5 rounded-full bg-current", state === "live" && "animate-pulse-soft")} />

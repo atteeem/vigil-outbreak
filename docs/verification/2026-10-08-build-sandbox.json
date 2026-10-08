@@ -1,0 +1,133 @@
+{
+  "generatedAt": "2026-10-08T05:26:31.604Z",
+  "node": "v22.22.0",
+  "proxyConfigured": true,
+  "results": [
+    {
+      "slug": "cdc-content",
+      "adapter": "CDC_CONTENT_API",
+      "url": "https://tools.cdc.gov/api/v2/resources/media?q=outbreak&max=50",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+      "httpStatus": 403,
+      "itemCount": 0,
+      "newest": null,
+      "checks": [
+        {
+          "name": "reachable",
+          "status": "FAIL",
+          "detail": "Blocked by local network policy — Blocked by local network policy before reaching tools.cdc.gov (proxy answered 403, host_not_allowed): Host not in allowlist: tools.cdc.gov. Add this host to your network egress settings to allow access."
+        }
+      ],
+      "sample": [],
+      "checkedAt": "2026-10-08T05:26:31.101Z",
+      "durationMs": 245
+    },
+    {
+      "slug": "cdc-travel-notices",
+      "adapter": "RSS",
+      "url": "https://wwwnc.cdc.gov/travel/rss/notices.xml",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+      "httpStatus": 403,
+      "itemCount": 0,
+      "newest": null,
+      "checks": [
+        {
+          "name": "reachable",
+          "status": "FAIL",
+          "detail": "Blocked by local network policy — Blocked by local network policy before reaching wwwnc.cdc.gov (proxy answered 403, host_not_allowed): Host not in allowlist: wwwnc.cdc.gov. Add this host to your network egress settings to allow access."
+        }
+      ],
+      "sample": [],
+      "checkedAt": "2026-10-08T05:26:31.346Z",
+      "durationMs": 104
+    },
+    {
+      "slug": "ecdc-news",
+      "adapter": "RSS",
+      "url": "https://www.ecdc.europa.eu/en/taxonomy/term/1307/feed",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+      "httpStatus": 403,
+      "itemCount": 0,
+      "newest": null,
+      "checks": [
+        {
+          "name": "reachable",
+          "status": "FAIL",
+          "detail": "Blocked by local network policy — Blocked by local network policy before reaching www.ecdc.europa.eu (proxy answered 403, host_not_allowed): Host not in allowlist: www.ecdc.europa.eu. Add this host to your network egress settings to allow access."
+        }
+      ],
+      "sample": [],
+      "checkedAt": "2026-10-08T05:26:31.450Z",
+      "durationMs": 125
+    },
+    {
+      "slug": "who-don",
+      "adapter": "WHO_DON_API",
+      "url": "https://www.who.int/api/news/diseaseoutbreaknews",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+      "httpStatus": 403,
+      "itemCount": 0,
+      "newest": null,
+      "checks": [
+        {
+          "name": "reachable",
+          "status": "FAIL",
+          "detail": "Blocked by local network policy — Blocked by local network policy before reaching www.who.int (proxy answered 403, host_not_allowed): Host not in allowlist: www.who.int. Add this host to your network egress settings to allow access."
+        }
+      ],
+      "sample": [],
+      "checkedAt": "2026-10-08T05:26:31.576Z",
+      "durationMs": 11
+    },
+    {
+      "slug": "who-don-hubs-route",
+      "adapter": "WHO_DON_API",
+      "url": "https://www.who.int/api/hubs/diseaseoutbreaknews",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+      "httpStatus": 403,
+      "itemCount": 0,
+      "newest": null,
+      "checks": [
+        {
+          "name": "reachable",
+          "status": "FAIL",
+          "detail": "Blocked by local network policy — Blocked by local network policy before reaching www.who.int (proxy answered 403, host_not_allowed): Host not in allowlist: www.who.int. Add this host to your network egress settings to allow access."
+        }
+      ],
+      "sample": [],
+      "checkedAt": "2026-10-08T05:26:31.587Z",
+      "durationMs": 13
+    },
+    {
+      "slug": "who-don-emergencies-route",
+      "adapter": "WHO_DON_API",
+      "url": "https://www.who.int/api/emergencies/diseaseoutbreaknews",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+      "httpStatus": 403,
+      "itemCount": 0,
+      "newest": null,
+      "checks": [
+        {
+          "name": "reachable",
+          "status": "FAIL",
+          "detail": "Blocked by local network policy — Blocked by local network policy before reaching www.who.int (proxy answered 403, host_not_allowed): Host not in allowlist: www.who.int. Add this host to your network egress settings to allow access."
+        }
+      ],
+      "sample": [],
+      "checkedAt": "2026-10-08T05:26:31.600Z",
+      "durationMs": 4
+    }
+  ]
+}

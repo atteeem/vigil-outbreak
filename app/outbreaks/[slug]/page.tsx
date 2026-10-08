@@ -6,7 +6,7 @@ import { getOutbreakDetail, type OutbreakDetailDTO } from "@/lib/server/queries"
 import { parseAsOf } from "@/lib/domain/timeline";
 import { CLASSIFICATION_LABEL, METRIC_LABEL, PATHOGEN_STATUS_LABEL, RISK_LABEL, UPDATE_KIND_LABEL, type Classification, type Metric, type PathogenStatus } from "@/lib/domain/enums";
 import { formatCount } from "@/lib/domain/stats";
-import { ClassificationBadge, PathogenStatusText, SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
+import { ClassificationBadge, OriginBadge, PathogenStatusText, SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
 import { CaseStats } from "@/components/outbreak/case-stats";
 import { SeriesChart } from "@/components/outbreak/series-chart";
 import { OutbreakMap } from "@/components/map/outbreak-map";
@@ -241,6 +241,25 @@ export default async function OutbreakPage({ params, searchParams }: Params) {
             )}
           </Section>
 
+          <Section title="Primary-source validation" id="validation" count={d.validation.pending.length}>
+            {d.validation.pending.length === 0 && d.validation.unsourcedRiskAssessments.length === 0 ? (
+              <p className="text-xs text-ink-dim">All hand-compiled sources for this record have been checked against their primary publications{d.validation.ingestedCount ? `; ${d.validation.ingestedCount} items were retrieved automatically` : ""}.</p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs leading-relaxed text-ink-dim">These facts were compiled by hand from search results about the cited publications (the originals could not be opened from the build environment). Until an analyst checks each against the primary publication, treat them as provisional. Facts attributed “via” a news outlet should be checked against the original WHO / ECDC / Rospotrebnadzor statement.</p>
+                <ul className="space-y-2">
+                  {d.validation.pending.map((p) => (
+                    <li key={p.articleId} className="rounded-md border border-line bg-surface px-3 py-2 text-[12px]">
+                      <div className="flex flex-wrap items-center gap-1.5"><SourceTypeBadge type={p.sourceType} /><OriginBadge origin={p.origin} /><a className="text-ink hover:text-accent" href={p.url} target="_blank" rel="noreferrer">{p.sourceName} — {p.title} <ExternalLink className="inline h-3 w-3" /></a></div>
+                      {p.dependents.length > 0 && <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[11.5px] text-ink-dim">{p.dependents.map((x, i) => <li key={i}>{x}</li>)}</ul>}
+                    </li>
+                  ))}
+                  {d.validation.unsourcedRiskAssessments.map((r) => <li key={r} className="rounded-md border border-warn/30 px-3 py-2 text-[12px] text-warn">{r}</li>)}
+                </ul>
+              </>
+            )}
+          </Section>
+
           <Section title="Classification history" id="status-history" count={d.statusHistory.length}>
             <ol className="space-y-2">
               {[...d.statusHistory].reverse().map((s) => (
@@ -312,7 +331,7 @@ export default async function OutbreakPage({ params, searchParams }: Params) {
               {d.sources.map((s) => (
                 <li key={s.id} className="text-[12.5px]">
                   <a href={s.url} target="_blank" rel="noreferrer" className="group block">
-                    <span className="flex items-center gap-1.5 text-[11px] text-ink-faint"><SourceTypeBadge type={s.sourceType} />{s.sourceName} · <Time iso={s.publishedAt} withTime={false} /></span>
+                    <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-faint"><SourceTypeBadge type={s.sourceType} /><OriginBadge origin={s.origin} fetchedAt={s.fetchedAt} />{s.primaryValidatedAt && <span className="text-ok">checked vs primary</span>}{s.sourceName} · <Time iso={s.publishedAt} withTime={false} /></span>
                     <span className="mt-0.5 line-clamp-2 text-ink-dim group-hover:text-accent">{s.title} <ExternalLink className="inline h-3 w-3" /></span>
                   </a>
                 </li>

@@ -188,8 +188,13 @@ model Source {
   lastSuccessAt       DateTime?
   lastError           String?
   consecutiveFailures Int             @default(0)
-  /// Verification of the endpoint itself: UNTESTED | WORKING | FAILING
+  /// Verification of the endpoint itself: UNTESTED | WORKING | FAILING | BLOCKED (network policy, not the source)
   endpointStatus      String          @default("UNTESTED")
+  /// Classified cause of the last failure (lib/ingestion/errors.ts FailureKind).
+  lastErrorKind       String?
+  /// Last time the endpoint was checked by `npm run verify:sources` or "Test endpoint", and what it found.
+  lastVerifiedAt      DateTime?
+  lastVerification    String?
   notes               String?
   createdAt           DateTime        @default(now())
   articles            SourceArticle[]
@@ -235,6 +240,10 @@ model SourceArticle {
   duplicateOfId      String?
   /// Raw upstream payload (JSON) for audit.
   raw                String?
+  /// SEED (compiled by hand for the initial dataset) | INGESTED (retrieved by the pipeline) | MANUAL (entered by an analyst)
+  origin             String                       @default("INGESTED")
+  /// When an analyst confirmed a SEED/MANUAL article's facts against the primary publication (null = not yet).
+  primaryValidatedAt DateTime?
   claims             EvidenceClaim[]
   locations          OutbreakLocation[]
   observations       OutbreakObservation[]
@@ -309,6 +318,10 @@ model IngestionRun {
   itemsDuplicate Int             @default(0)
   itemsFailed    Int             @default(0)
   errorMessage   String?
+  /// Classified cause of a failed run (lib/ingestion/errors.ts FailureKind).
+  failureKind    String?
+  /// Number of upstream pages requested in this run.
+  pagesFetched   Int             @default(0)
   /// JSON array of per-item error strings.
   errors         String          @default("[]")
   articles       SourceArticle[]

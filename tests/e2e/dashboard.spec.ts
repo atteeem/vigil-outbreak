@@ -7,8 +7,13 @@ test("overview loads with KPIs, map, list and no console errors", async ({ page 
   await expect(page.getByRole("link", { name: "VIGIL OUTBREAK home" })).toBeVisible();
   for (const l of ["Overview", "Live Map", "Outbreaks", "Intelligence", "Analytics"]) await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: l })).toBeVisible();
   await expect(page.getByTestId("kpi-investigations")).toContainText("1");
-  await expect(page.getByTestId("kpi-refresh")).toContainText("No successful fetch yet");
-  await expect(page.getByTestId("live-indicator")).toHaveAttribute("data-state", "offline");
+  await expect(page.getByTestId("kpi-refresh")).toContainText("Last successful live ingestion");
+  await expect(page.getByTestId("kpi-refresh")).toContainText("None yet");
+  // No live source has succeeded in the test environment: the UI must not claim to be live.
+  await expect(page.getByTestId("live-indicator")).not.toHaveAttribute("data-state", "live");
+  await expect(page.getByTestId("live-indicator")).toContainText("Not live");
+  await expect(page.getByTestId("data-status-banner")).toContainText("Not live");
+  await expect(page.getByTestId("data-origins")).toContainText("seeded");
   const map = await waitForMap(page);
   const box = await map.boundingBox();
   expect(box!.height).toBeGreaterThan(300);
@@ -51,6 +56,11 @@ test("Russia investigation: list click opens details, map marker is an investiga
   await expect(page.getByTestId("unverified-figures")).toContainText("189–197");
   await expect(page.getByTestId("stat-confirmed")).toContainText("Not reported");
   await expect(page.getByTestId("outbreak-series-empty")).toBeVisible();
+  // Seeded facts are labelled and listed for primary-source validation; the record stays unconfirmed.
+  await expect(page.getByTestId("section-sources").getByTestId("origin-badge").first()).toHaveText("Seeded");
+  await expect(page.getByTestId("section-validation")).toContainText("compiled by hand");
+  await expect(page.getByTestId("section-validation")).toContainText("Newsweek");
+  await expect(page.getByTestId("section-chronology")).toContainText("WHO awaiting confirmation");
 });
 
 test("clicking the map marker selects the investigation", async ({ page }) => {

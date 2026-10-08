@@ -5,7 +5,7 @@ import { flagConflicts } from "@/lib/ingestion/pipeline";
 import { json, parseBody, fail, handleError } from "@/lib/server/http";
 
 const Action = z.object({
-  action: z.enum(["accept", "reject", "duplicate", "reopen", "verify"]),
+  action: z.enum(["accept", "reject", "duplicate", "reopen", "verify", "validate-primary", "unvalidate-primary"]),
   outbreakId: z.string().nullable().optional(),
   duplicateOfId: z.string().optional(),
   verificationStatus: z.enum(["UNVERIFIED", "VERIFIED", "DISPUTED", "RETRACTED"]).optional(),
@@ -36,6 +36,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (!body.data.verificationStatus) return fail("verificationStatus required", 422);
       data = { verificationStatus: body.data.verificationStatus };
     }
+    else if (action === "validate-primary") data = { primaryValidatedAt: new Date() };
+    else if (action === "unvalidate-primary") data = { primaryValidatedAt: null };
     const updated = await prisma.sourceArticle.update({ where: { id }, data });
     await audit(`article.${action}`, "article", id, body.data);
     return json({ article: updated });

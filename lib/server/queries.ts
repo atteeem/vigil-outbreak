@@ -5,6 +5,7 @@ import { summarizeCases, seriesFor, verificationAt, type CaseSummary } from "@/l
 import { isConfirmedActive, isInvestigation, CLASSIFICATIONS, type Metric } from "@/lib/domain/enums";
 import { countryName } from "@/lib/geo/countries";
 import { safeJson } from "@/lib/ingestion/pipeline";
+import { computeLiveStatus, type LiveStatus } from "@/lib/domain/live-status";
 import type { Prisma } from "@prisma/client";
 
 export interface OutbreakFilters {
@@ -151,6 +152,8 @@ export interface FeedItemDTO {
   summary: string | null;
   verificationStatus: string;
   reviewStatus: string;
+  /** SEED | INGESTED | MANUAL — distinguishes hand-compiled seed data from automatically retrieved items. */
+  origin: string;
   outbreak: { slug: string; title: string } | null;
 }
 
@@ -191,6 +194,7 @@ export async function listFeed(asOf: Date | null, filters: OutbreakFilters & { s
       summary: r.summary,
       verificationStatus: r.verificationStatus,
       reviewStatus: r.reviewStatus,
+      origin: r.origin,
       outbreak: outbreakVisible ? { slug: r.outbreak!.slug, title: r.outbreak!.title } : null,
     });
     if (items.length >= limit) break;
@@ -199,21 +203,21 @@ export async function listFeed(asOf: Date | null, filters: OutbreakFilters & { s
 }
 
 export interface FreshnessDTO {
+  /** Last success of a REAL automatic source (fixture/localhost sources never count). */
   lastSuccessAt: string | null;
   lastAttemptAt: string | null;
-  sources: { slug: string; name: string; enabled: boolean; endpointStatus: string; lastSuccessAt: string | null; lastFetchAt: string | null; lastError: string | null; pollIntervalMinutes: number }[];
+  live: LiveStatus;
+  sources: { slug: string; name: string; url: string | null; adapter: string; enabled: boolean; endpointStatus: string; lastSuccessAt: string | null; lastFetchAt: string | null; lastError: string | null; lastErrorKind: string | null; lastVerifiedAt: string | null; pollIntervalMinutes: number }[];
 }
 
-export async function getFreshness(): Promise<FreshnessDTO> {
+export async function getFreshness(now = new Date()): Promise<FreshnessDTO> {
   const sources = await prisma.source.findMany({ where: { adapter: { not: "MANUAL" } }, orderBy: { name: "asc" } });
-  const max = (ds: (Date | null)[]) => {
-    const t = ds.filter((d): d is Date => !!d).map((d) => d.getTime());
-    return t.length ? new Date(Math.max(...t)).toISOString() : null;
-  };
+  const live = computeLiveStatus(sources, now);
   return {
-    lastSuccessAt: max(sources.map((s) => s.lastSuccessAt)),
-    lastAttemptAt: max(sources.map((s) => s.lastFetchAt)),
-    sources: sources.map((s) => ({ slug: s.slug, name: s.name, enabled: s.enabled, endpointStatus: s.endpointStatus, lastSuccessAt: s.lastSuccessAt?.toISOString() ?? null, lastFetchAt: s.lastFetchAt?.toISOString() ?? null, lastError: s.lastError, pollIntervalMinutes: s.pollIntervalMinutes })),
+    lastSuccessAt: live.lastLiveSuccessAt,
+    lastAttemptAt: live.lastLiveAttemptAt,
+    live,
+    sources: sources.map((s) => ({ slug: s.slug, name: s.name, url: s.url, adapter: s.adapter, enabled: s.enabled, endpointStatus: s.endpointStatus, lastSuccessAt: s.lastSuccessAt?.toISOString() ?? null, lastFetchAt: s.lastFetchAt?.toISOString() ?? null, lastError: s.lastError, lastErrorKind: s.lastErrorKind, lastVerifiedAt: s.lastVerifiedAt?.toISOString() ?? null, pollIntervalMinutes: s.pollIntervalMinutes })),
   };
 }
 
@@ -221,6 +225,9 @@ export interface DashboardDTO {
   asOf: string | null;
   generatedAt: string;
   kpis: { monitoredInvestigations: number; confirmedActive: number; newReports24h: number; countriesWithActivity: number; lastSuccessfulRefresh: string | null; lastAttempt: string | null };
+  live: LiveStatus;
+  /** Share of visible source articles by origin (seeded vs automatically ingested vs manual). */
+  origins: { SEED: number; INGESTED: number; MANUAL: number };
   outbreaks: OutbreakSummaryDTO[];
   totalOutbreaks: number;
   feed: FeedItemDTO[];
@@ -232,7 +239,7 @@ export interface DashboardDTO {
 
 export async function getDashboard(asOf: Date | null, filters: OutbreakFilters = {}): Promise<DashboardDTO> {
   const ref = asOf ?? new Date();
-  const [all, filtered, feed, freshness, recentArticles, updates] = await Promise.all([
+  const [all, filtered, feed, freshness, recentArticles, updates, originCounts] = await Promise.all([
     listOutbreaks(asOf, {}),
     listOutbreaks(asOf, filters),
     listFeed(asOf, filters, 25),
@@ -247,6 +254,7 @@ export async function getDashboard(asOf: Date | null, filters: OutbreakFilters =
       take: 40,
       include: { outbreak: { select: { slug: true, title: true } } },
     }),
+    prisma.sourceArticle.groupBy({ by: ["origin"], where: { publishedAt: lte(asOf), reviewStatus: { in: ["ACCEPTED", "PENDING"] } }, _count: true }),
   ]);
   const active = all.filter((o) => o.classification !== "RESOLVED");
   const dayKey = (d: Date) => d.toISOString().slice(0, 10);
@@ -286,6 +294,8 @@ export async function getDashboard(asOf: Date | null, filters: OutbreakFilters =
       lastSuccessfulRefresh: freshness.lastSuccessAt,
       lastAttempt: freshness.lastAttemptAt,
     },
+    live: freshness.live,
+    origins: { SEED: 0, INGESTED: 0, MANUAL: 0, ...Object.fromEntries(originCounts.map((o) => [o.origin, o._count])) },
     outbreaks: filtered,
     totalOutbreaks: all.length,
     feed,
@@ -340,8 +350,25 @@ export async function getOutbreakDetail(slug: string, asOf: Date | null) {
     officialStatements: updates.filter((u) => u.kind === "OFFICIAL_STATEMENT" && u.sourceType === "OFFICIAL"),
     measures: updates.filter((u) => u.kind === "MEASURE"),
     riskAssessments: o.riskAssessments.map((r) => ({ id: r.id, organization: r.organization, scope: r.scope, level: r.level, statement: r.statement, publishedAt: r.publishedAt.toISOString(), verificationStatus: r.verificationStatus, source: articleRef(r.sourceArticle) })),
-    sources: o.articles.map((a) => ({ id: a.id, url: a.url, title: a.title, sourceName: a.source.name, organization: a.source.organization, sourceType: a.sourceType, publishedAt: a.publishedAt.toISOString(), verificationStatus: a.verificationStatus })),
+    sources: o.articles.map((a) => ({ id: a.id, url: a.url, title: a.title, sourceName: a.source.name, organization: a.source.organization, sourceType: a.sourceType, publishedAt: a.publishedAt.toISOString(), fetchedAt: a.fetchedAt.toISOString(), verificationStatus: a.verificationStatus, origin: a.origin, primaryValidatedAt: a.primaryValidatedAt?.toISOString() ?? null })),
     series: { CONFIRMED_CASES: series("CONFIRMED_CASES"), SUSPECTED_CASES: series("SUSPECTED_CASES"), DEATHS: series("DEATHS") },
+    validation: (() => {
+      // Facts resting on hand-compiled (seed/manual) articles that nobody has yet checked against the primary
+      // publication. They stay labelled until an analyst marks the article validated.
+      const pending = o.articles.filter((a) => a.origin !== "INGESTED" && !a.primaryValidatedAt);
+      const deps = (id: string) => [
+        ...o.observations.filter((x) => x.sourceArticleId === id).map((x) => `Figure: ${x.metric.replace(/_/g, " ").toLowerCase()} ${x.value ?? "n/r"}${x.valueHigh ? `–${x.valueHigh}` : ""} (${x.attributedTo ?? "unattributed"})`),
+        ...o.updates.filter((u) => u.sourceArticleId === id).map((u) => `Chronology: ${u.title}`),
+        ...o.claims.filter((c) => c.articleId === id).map((c) => `Claim: ${c.text}`),
+        ...o.riskAssessments.filter((r) => r.sourceArticleId === id).map((r) => `Risk assessment: ${r.organization} — ${r.scope}`),
+      ];
+      return {
+        pending: pending.map((a) => ({ articleId: a.id, title: a.title, url: a.url, sourceName: a.source.name, sourceType: a.sourceType, origin: a.origin, dependents: deps(a.id) })),
+        unsourcedRiskAssessments: o.riskAssessments.filter((r) => !r.sourceArticleId).map((r) => `${r.organization} — ${r.scope}: no publication linked`),
+        validatedCount: o.articles.filter((a) => a.origin !== "INGESTED" && a.primaryValidatedAt).length,
+        ingestedCount: o.articles.filter((a) => a.origin === "INGESTED").length,
+      };
+    })(),
   };
 }
 

@@ -107,7 +107,7 @@ export const RISK_LABEL: Record<string, string> = {
 export const CLAIM_TYPES = ["CASE_COUNT", "DEATH", "OBSERVATION_COUNT", "PATHOGEN_ID", "RISK_ASSESSMENT", "MEASURE", "STATEMENT", "LOCATION", "OTHER"] as const;
 
 export const SOURCE_KINDS = ["OFFICIAL", "MEDIA", "AGGREGATOR"] as const;
-export const ADAPTERS = ["WHO_DON_API", "RSS", "MANUAL"] as const;
+export const ADAPTERS = ["WHO_DON_API", "CDC_CONTENT_API", "RSS", "MANUAL"] as const;
 export type AdapterId = (typeof ADAPTERS)[number];
 
 export function oneOf<T extends readonly string[]>(list: T, value: unknown): value is T[number] {

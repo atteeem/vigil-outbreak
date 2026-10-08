@@ -1,0 +1,205 @@
+{
+ "value": [
+  {
+   "Id": "p0",
+   "DonId": "2026-DON-P00",
+   "Title": "Fixture paging item 0",
+   "UrlName": "2026-DON-P00",
+   "PublicationDate": "2026-09-28T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p1",
+   "DonId": "2026-DON-P01",
+   "Title": "Fixture paging item 1",
+   "UrlName": "2026-DON-P01",
+   "PublicationDate": "2026-09-27T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p2",
+   "DonId": "2026-DON-P02",
+   "Title": "Fixture paging item 2",
+   "UrlName": "2026-DON-P02",
+   "PublicationDate": "2026-09-26T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p3",
+   "DonId": "2026-DON-P03",
+   "Title": "Fixture paging item 3",
+   "UrlName": "2026-DON-P03",
+   "PublicationDate": "2026-09-25T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p4",
+   "DonId": "2026-DON-P04",
+   "Title": "Fixture paging item 4",
+   "UrlName": "2026-DON-P04",
+   "PublicationDate": "2026-09-24T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p5",
+   "DonId": "2026-DON-P05",
+   "Title": "Fixture paging item 5",
+   "UrlName": "2026-DON-P05",
+   "PublicationDate": "2026-09-23T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p6",
+   "DonId": "2026-DON-P06",
+   "Title": "Fixture paging item 6",
+   "UrlName": "2026-DON-P06",
+   "PublicationDate": "2026-09-22T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p7",
+   "DonId": "2026-DON-P07",
+   "Title": "Fixture paging item 7",
+   "UrlName": "2026-DON-P07",
+   "PublicationDate": "2026-09-21T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p8",
+   "DonId": "2026-DON-P08",
+   "Title": "Fixture paging item 8",
+   "UrlName": "2026-DON-P08",
+   "PublicationDate": "2026-09-20T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p9",
+   "DonId": "2026-DON-P09",
+   "Title": "Fixture paging item 9",
+   "UrlName": "2026-DON-P09",
+   "PublicationDate": "2026-09-19T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p10",
+   "DonId": "2026-DON-P10",
+   "Title": "Fixture paging item 10",
+   "UrlName": "2026-DON-P10",
+   "PublicationDate": "2026-09-18T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p11",
+   "DonId": "2026-DON-P11",
+   "Title": "Fixture paging item 11",
+   "UrlName": "2026-DON-P11",
+   "PublicationDate": "2026-09-17T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p12",
+   "DonId": "2026-DON-P12",
+   "Title": "Fixture paging item 12",
+   "UrlName": "2026-DON-P12",
+   "PublicationDate": "2026-09-16T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p13",
+   "DonId": "2026-DON-P13",
+   "Title": "Fixture paging item 13",
+   "UrlName": "2026-DON-P13",
+   "PublicationDate": "2026-09-15T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p14",
+   "DonId": "2026-DON-P14",
+   "Title": "Fixture paging item 14",
+   "UrlName": "2026-DON-P14",
+   "PublicationDate": "2026-09-14T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p15",
+   "DonId": "2026-DON-P15",
+   "Title": "Fixture paging item 15",
+   "UrlName": "2026-DON-P15",
+   "PublicationDate": "2026-09-13T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p16",
+   "DonId": "2026-DON-P16",
+   "Title": "Fixture paging item 16",
+   "UrlName": "2026-DON-P16",
+   "PublicationDate": "2026-09-12T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p17",
+   "DonId": "2026-DON-P17",
+   "Title": "Fixture paging item 17",
+   "UrlName": "2026-DON-P17",
+   "PublicationDate": "2026-09-11T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p18",
+   "DonId": "2026-DON-P18",
+   "Title": "Fixture paging item 18",
+   "UrlName": "2026-DON-P18",
+   "PublicationDate": "2026-09-10T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p19",
+   "DonId": "2026-DON-P19",
+   "Title": "Fixture paging item 19",
+   "UrlName": "2026-DON-P19",
+   "PublicationDate": "2026-09-09T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p20",
+   "DonId": "2026-DON-P20",
+   "Title": "Fixture paging item 20",
+   "UrlName": "2026-DON-P20",
+   "PublicationDate": "2026-09-08T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p21",
+   "DonId": "2026-DON-P21",
+   "Title": "Fixture paging item 21",
+   "UrlName": "2026-DON-P21",
+   "PublicationDate": "2026-09-07T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p22",
+   "DonId": "2026-DON-P22",
+   "Title": "Fixture paging item 22",
+   "UrlName": "2026-DON-P22",
+   "PublicationDate": "2026-09-06T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p23",
+   "DonId": "2026-DON-P23",
+   "Title": "Fixture paging item 23",
+   "UrlName": "2026-DON-P23",
+   "PublicationDate": "2026-09-05T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  },
+  {
+   "Id": "p24",
+   "DonId": "2026-DON-P24",
+   "Title": "Fixture paging item 24",
+   "UrlName": "2026-DON-P24",
+   "PublicationDate": "2026-09-04T12:00:00Z",
+   "Summary": "<p>paging</p>"
+  }
+ ],
+ "@odata.nextLink": "/who-paged?page=2"
+}

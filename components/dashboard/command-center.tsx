@@ -10,12 +10,12 @@ import { markersFor } from "@/lib/map/markers";
 import { DetailPanel } from "@/components/dashboard/detail-panel";
 import { TimelineControls } from "@/components/dashboard/timeline-controls";
 import { useTimeline } from "@/hooks/use-timeline";
-import { ClassificationBadge, ClassificationDot, SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
+import { ClassificationBadge, ClassificationDot, OriginBadge, SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
 import { Time } from "@/components/ui/time";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CLASSIFICATIONS, CLASSIFICATION_LABEL, UPDATE_KIND_LABEL } from "@/lib/domain/enums";
 import { formatCount } from "@/lib/domain/stats";
-import { cn, relative } from "@/lib/utils";
+import { cn, fmtUtc, relative } from "@/lib/utils";
 
 export interface DashboardFilters {
   disease: string;
@@ -231,6 +231,7 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
         <li key={i.id} className="px-3 py-2">
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-ink-faint">
             <SourceTypeBadge type={i.sourceType} />
+            <OriginBadge origin={i.origin} fetchedAt={i.fetchedAt} />
             <span>{i.sourceName}</span>·<Time iso={i.publishedAt} />
             {i.reviewStatus === "PENDING" && <span className="text-warn">· awaiting review</span>}
           </div>
@@ -286,6 +287,14 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
           <button className="btn py-0.5" onClick={tl.live}>Return to live</button>
         </div>
       )}
+      {!asOf && data.live.state !== "LIVE" && (
+        <div className={cn("mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-1.5 text-xs", data.live.state === "DOWN" ? "border-danger/30 bg-danger/[0.06] text-danger" : "border-warn/30 bg-warn/[0.06] text-warn")} role="status" data-testid="data-status-banner">
+          <span className="font-medium">Not live.</span>
+          <span>{data.live.detail}</span>
+          {data.live.failing.length > 0 && <span className="text-ink-dim">{data.live.failing.map((f) => `${f.name}: ${f.label}`).join(" · ")}</span>}
+          <span className="text-ink-dim" data-testid="data-origins">Records: {data.origins.SEED} seeded (hand-compiled) · {data.origins.INGESTED} auto-ingested · {data.origins.MANUAL} manual</span>
+        </div>
+      )}
       {error && <div className="mb-2 rounded-md border border-danger/30 bg-danger/[0.06] px-3 py-1.5 text-xs text-danger" role="alert">{error}</div>}
 
       {variant === "overview" && (
@@ -294,7 +303,7 @@ export function CommandCenter({ initial, initialFilters, initialAsOf, variant }:
           <Kpi label="Confirmed active outbreaks" value={String(k.confirmedActive)} sub="localized + widespread" testId="kpi-confirmed" />
           <Kpi label="New reports (24h)" value={String(k.newReports24h)} sub="by publication time" testId="kpi-new-reports" />
           <Kpi label="Countries with activity" value={String(k.countriesWithActivity)} sub="excludes resolved" testId="kpi-countries" />
-          <Kpi label="Last successful refresh" value={k.lastSuccessfulRefresh ? relative(k.lastSuccessfulRefresh, refNow) : "No successful fetch yet"} sub={k.lastAttempt ? `last attempt ${relative(k.lastAttempt, refNow)}` : "automatic sources have not run"} testId="kpi-refresh" tone={k.lastSuccessfulRefresh ? undefined : "dim"} />
+          <Kpi label="Last successful live ingestion" value={k.lastSuccessfulRefresh ? relative(k.lastSuccessfulRefresh, refNow) : "None yet"} sub={k.lastSuccessfulRefresh ? fmtUtc(k.lastSuccessfulRefresh) : k.lastAttempt ? `last attempt ${relative(k.lastAttempt, refNow)} failed` : "automatic sources have not run"} testId="kpi-refresh" tone={k.lastSuccessfulRefresh ? undefined : "dim"} />
         </section>
       )}
 

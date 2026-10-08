@@ -18,7 +18,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (!body.ok) return body.res;
     const existing = await prisma.source.findUnique({ where: { id } });
     if (!existing) return fail("Source not found", 404);
-    if (body.data.enabled && existing.adapter !== "MANUAL" && !(body.data.url ?? existing.url)) return fail("Cannot enable a source without a URL", 422);
+    if (body.data.enabled && existing.adapter !== "MANUAL") {
+      if (!(body.data.url ?? existing.url)) return fail("Cannot enable a source without a URL", 422);
+      // Never enable an endpoint nobody has seen answer in the documented format.
+      const urlChanged = body.data.url !== undefined && body.data.url !== existing.url;
+      if (!existing.enabled && (urlChanged || existing.endpointStatus !== "WORKING")) return fail("Run “Test endpoint” successfully before enabling this source (its endpoint has not been verified).", 422);
+    }
     const source = await prisma.source.update({ where: { id }, data: { ...body.data, ...(body.data.url !== undefined && body.data.url !== existing.url ? { endpointStatus: "UNTESTED" } : {}) } });
     await audit("source.update", "source", id, body.data);
     return json({ source });
