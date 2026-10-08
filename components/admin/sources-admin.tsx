@@ -57,7 +57,7 @@ function SourceRow({ s }: { s: Source }) {
   );
 }
 
-interface Live { state: string; detail: string; lastLiveSuccessAt: string | null; failing: { slug: string; name: string; label: string; error: string | null }[] }
+interface Live { state: string; detail: string; lastLiveSuccessAt: string | null; failing: { slug: string; name: string; label: string; error: string | null }[]; worker: { healthy: boolean; mode: string | null; lastTickAt: string | null; lastTickStatus: string | null } | null }
 
 function HealthPanel({ live }: { live: Live }) {
   const tone = live.state === "LIVE" ? "border-ok/30 bg-ok/[0.05]" : live.state === "DOWN" ? "border-danger/30 bg-danger/[0.05]" : "border-warn/30 bg-warn/[0.05]";
@@ -65,6 +65,12 @@ function HealthPanel({ live }: { live: Live }) {
     <section className={cn("rounded-lg border px-4 py-3 text-xs", tone)} data-testid="source-health">
       <p className="text-[13px] font-medium">Live ingestion: {live.state === "LIVE" ? "live" : live.state === "DOWN" ? "down — all enabled sources failing" : live.state === "NOT_CONFIGURED" ? "no automatic sources enabled" : "stale"}</p>
       <p className="text-ink-dim">{live.detail} Last successful live ingestion: {live.lastLiveSuccessAt ? fmtUtc(live.lastLiveSuccessAt) : "never"}.</p>
+      {live.worker && (
+        <p className="text-ink-dim" data-testid="worker-health">
+          Ingestion process: <span className={live.worker.healthy ? "text-ok" : "text-warn"}>{live.worker.healthy ? "running" : "not running"}</span>
+          {live.worker.lastTickAt ? <> · {live.worker.mode} · last pass {fmtUtc(live.worker.lastTickAt)} — {live.worker.lastTickStatus}</> : " · no scheduler, worker or cron pass recorded"}
+        </p>
+      )}
       {live.failing.length > 0 && (
         <ul className="mt-1.5 space-y-0.5">
           {live.failing.map((f) => <li key={f.slug}><span className="font-medium">{f.name}</span>: <span className="text-danger">{f.label}</span>{f.error ? <span className="text-ink-faint"> — {f.error}</span> : null}</li>)}

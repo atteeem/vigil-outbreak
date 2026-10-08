@@ -30,6 +30,8 @@ export class IngestionError extends Error {
     message: string,
     readonly httpStatus: number | null = null,
     readonly kind: FailureKind = "UNKNOWN",
+    /** Server-requested delay (Retry-After), if any. */
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = "IngestionError";

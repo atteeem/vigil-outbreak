@@ -15,3 +15,5 @@ lib/generated
 prisma/vitest.db*
 prisma/test.db*
 reports/
+prisma/.db-check.db*
+prisma/verify.db*

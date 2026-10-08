@@ -1,0 +1,135 @@
+{
+  "generatedAt": "2026-10-08T05:54:03.286Z",
+  "node": "v22.22.0",
+  "platform": "linux",
+  "proxyConfigured": true,
+  "mode": "pipeline",
+  "notes": [
+    "ECDC feed discovery failed (NETWORK_POLICY_BLOCKED): Blocked by local network policy before reaching www.ecdc.europa.eu (proxy answered 403, host_not_allowed): Host not in allowlist: www.ecdc.europa.eu. Add this host to your network egress settings to allow access.. Checked the fallback News feed URL instead."
+  ],
+  "results": [
+    {
+      "slug": "who-don",
+      "adapter": "WHO_DON_API",
+      "url": "https://www.who.int/api/news/diseaseoutbreaknews",
+      "label": "WHO Disease Outbreak News",
+      "stages": [
+        {
+          "name": "endpoint",
+          "status": "FAIL",
+          "detail": "BLOCKED_BY_NETWORK (NETWORK_POLICY_BLOCKED): reachable FAIL"
+        }
+      ],
+      "stored": 0,
+      "extraction": null,
+      "samples": [],
+      "checkedAt": "2026-10-08T05:54:03.156Z",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failedStage": "endpoint",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "endpoint": {
+        "slug": "who-don",
+        "adapter": "WHO_DON_API",
+        "url": "https://www.who.int/api/news/diseaseoutbreaknews",
+        "verdict": "BLOCKED_BY_NETWORK",
+        "failureKind": "NETWORK_POLICY_BLOCKED",
+        "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+        "httpStatus": 403,
+        "itemCount": 0,
+        "newest": null,
+        "checks": [
+          {
+            "name": "reachable",
+            "status": "FAIL",
+            "detail": "Blocked by local network policy — Blocked by local network policy before reaching www.who.int (proxy answered 403, host_not_allowed): Host not in allowlist: www.who.int. Add this host to your network egress settings to allow access."
+          }
+        ],
+        "sample": [],
+        "checkedAt": "2026-10-08T05:54:03.156Z",
+        "durationMs": 11
+      }
+    },
+    {
+      "slug": "cdc-content",
+      "adapter": "CDC_CONTENT_API",
+      "url": "https://tools.cdc.gov/api/v2/resources/media?q=outbreak&max=50",
+      "label": "CDC Content Services (q=outbreak)",
+      "stages": [
+        {
+          "name": "endpoint",
+          "status": "FAIL",
+          "detail": "BLOCKED_BY_NETWORK (NETWORK_POLICY_BLOCKED): reachable FAIL"
+        }
+      ],
+      "stored": 0,
+      "extraction": null,
+      "samples": [],
+      "checkedAt": "2026-10-08T05:54:03.167Z",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failedStage": "endpoint",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "endpoint": {
+        "slug": "cdc-content",
+        "adapter": "CDC_CONTENT_API",
+        "url": "https://tools.cdc.gov/api/v2/resources/media?q=outbreak&max=50",
+        "verdict": "BLOCKED_BY_NETWORK",
+        "failureKind": "NETWORK_POLICY_BLOCKED",
+        "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+        "httpStatus": 403,
+        "itemCount": 0,
+        "newest": null,
+        "checks": [
+          {
+            "name": "reachable",
+            "status": "FAIL",
+            "detail": "Blocked by local network policy — Blocked by local network policy before reaching tools.cdc.gov (proxy answered 403, host_not_allowed): Host not in allowlist: tools.cdc.gov. Add this host to your network egress settings to allow access."
+          }
+        ],
+        "sample": [],
+        "checkedAt": "2026-10-08T05:54:03.167Z",
+        "durationMs": 115
+      }
+    },
+    {
+      "slug": "ecdc-news",
+      "adapter": "RSS",
+      "url": "https://www.ecdc.europa.eu/en/taxonomy/term/1307/feed",
+      "label": "ECDC News (fallback URL; not confirmed on ECDC's page)",
+      "stages": [
+        {
+          "name": "endpoint",
+          "status": "FAIL",
+          "detail": "BLOCKED_BY_NETWORK (NETWORK_POLICY_BLOCKED): reachable FAIL"
+        }
+      ],
+      "stored": 0,
+      "extraction": null,
+      "samples": [],
+      "checkedAt": "2026-10-08T05:54:03.282Z",
+      "verdict": "BLOCKED_BY_NETWORK",
+      "failedStage": "endpoint",
+      "failureKind": "NETWORK_POLICY_BLOCKED",
+      "endpoint": {
+        "slug": "ecdc-news",
+        "adapter": "RSS",
+        "url": "https://www.ecdc.europa.eu/en/taxonomy/term/1307/feed",
+        "verdict": "BLOCKED_BY_NETWORK",
+        "failureKind": "NETWORK_POLICY_BLOCKED",
+        "hint": "The request never reached the publisher. Allow the host in this environment's egress/firewall settings, or run ingestion from a network with normal internet access.",
+        "httpStatus": 403,
+        "itemCount": 0,
+        "newest": null,
+        "checks": [
+          {
+            "name": "reachable",
+            "status": "FAIL",
+            "detail": "Blocked by local network policy — Blocked by local network policy before reaching www.ecdc.europa.eu (proxy answered 403, host_not_allowed): Host not in allowlist: www.ecdc.europa.eu. Add this host to your network egress settings to allow access."
+          }
+        ],
+        "sample": [],
+        "checkedAt": "2026-10-08T05:54:03.282Z",
+        "durationMs": 4
+      }
+    }
+  ]
+}

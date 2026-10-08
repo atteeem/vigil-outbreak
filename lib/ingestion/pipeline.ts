@@ -1,5 +1,6 @@
 // Ingestion pipeline: fetch -> normalize -> extract -> associate -> dedupe -> store -> flag conflicts.
 // Failures are recorded on the run and the source; nothing is ever substituted for missing upstream data.
+import { hostname } from "node:os";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { canonicalizeUrl, shortSummary, titleHash } from "./normalize";
@@ -28,8 +29,35 @@ export interface RunSummary {
 }
 
 const DUPLICATE_TITLE_WINDOW_MS = 3 * 24 * 3600_000;
-const g = globalThis as unknown as { __outbreakRunning?: Set<string> };
-const running = (g.__outbreakRunning ??= new Set<string>());
+/** A run holds a per-source lease in the database, so concurrent processes (web + worker, two workers, a cron
+ * overlapping a manual Fetch Now) never fetch the same source at once. A crashed holder's lease simply expires. */
+export const LEASE_MS = 10 * 60_000;
+const OWNER = `${hostname()}:${process.pid}:${Math.random().toString(36).slice(2, 8)}`;
+
+/** Next poll time after a run. Success: the source's interval. Failure: exponential backoff (×2 per consecutive
+ * failure, max ×16, capped at 6 h) with ±10% jitter so many instances don't synchronise. */
+export function nextAttemptAfter(now: Date, intervalMinutes: number, consecutiveFailures: number, jitter = Math.random()): Date {
+  const factor = consecutiveFailures > 0 ? Math.min(2 ** Math.min(consecutiveFailures, 4), 16) : 1;
+  const ms = Math.min(intervalMinutes * 60_000 * factor, 6 * 3600_000) * (0.9 + jitter * 0.2);
+  return new Date(now.getTime() + ms);
+}
+
+async function acquireLease(sourceId: string, now: Date): Promise<boolean> {
+  const r = await prisma.source.updateMany({
+    where: { id: sourceId, OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }] },
+    data: { leaseOwner: OWNER, leaseUntil: new Date(now.getTime() + LEASE_MS) },
+  });
+  if (r.count === 0) return false;
+  // Runs left RUNNING by a crashed process are closed, not silently counted.
+  await prisma.ingestionRun.updateMany({ where: { sourceId, status: "RUNNING", startedAt: { lt: new Date(now.getTime() - LEASE_MS) } }, data: { status: "ABANDONED", finishedAt: now, errorMessage: "Process ended before the run finished (lease expired)." } });
+  return true;
+}
+
+async function releaseLease(sourceId: string) {
+  await prisma.source.updateMany({ where: { id: sourceId, leaseOwner: OWNER }, data: { leaseOwner: null, leaseUntil: null } });
+}
+
+const isUniqueViolation = (err: unknown) => (err as { code?: string })?.code === "P2002" || /Unique constraint/i.test((err as Error)?.message ?? "");
 
 export async function runAdapter(adapter: string, url: string | null, opts: FetchOptions = {}): Promise<AdapterResult> {
   if (!url) throw new IngestionError("Source has no URL configured", null, "CONFIG");
@@ -101,7 +129,11 @@ export async function storeItem(
   const suggestedOutbreakId = matchOutbreak(x, ctx.candidates);
   const summary = item.text ? shortSummary(item.text) : null;
 
-  const article = await prisma.sourceArticle.create({
+  // The unique keys (canonicalUrl; sourceId+externalId) make the insert itself idempotent: if another process stored
+  // the same item between our checks and this insert, the violation is a duplicate, not an error.
+  let article: { id: string };
+  try {
+    article = await prisma.sourceArticle.create({
     data: {
       sourceId: source.id,
       url: item.url,
@@ -126,7 +158,11 @@ export async function storeItem(
       raw: JSON.stringify(item.raw).slice(0, 100_000),
       origin: "INGESTED",
     },
-  });
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) return "duplicate";
+    throw err;
+  }
   if (near) return "duplicate";
 
   const claims: Prisma.EvidenceClaimCreateManyInput[] = x.counts.map((c) => ({
@@ -172,8 +208,7 @@ export async function runSource(sourceId: string, trigger: Trigger, opts: FetchO
   if (!source) throw new Error(`Unknown source ${sourceId}`);
   const base: RunSummary = { runId: null, sourceId, sourceName: source.name, status: "SKIPPED", itemsFetched: 0, itemsNew: 0, itemsDuplicate: 0, itemsFailed: 0, error: null, failureKind: null };
   if (source.adapter === "MANUAL") return { ...base, error: "Manual source: nothing to fetch" };
-  if (running.has(sourceId)) return { ...base, error: "A fetch for this source is already running" };
-  running.add(sourceId);
+  if (!(await acquireLease(sourceId, new Date()))) return { ...base, error: "A fetch for this source is already running (lease held by another process)" };
   const run = await prisma.ingestionRun.create({ data: { sourceId, trigger, status: "RUNNING" } });
   const now = () => new Date();
   try {
@@ -186,7 +221,7 @@ export async function runSource(sourceId: string, trigger: Trigger, opts: FetchO
       const failureKind: FailureKind = err instanceof IngestionError ? err.kind : "UNKNOWN";
       await prisma.ingestionRun.update({ where: { id: run.id }, data: { status: "FAILED", finishedAt: now(), errorMessage: message, httpStatus, failureKind } });
       // BLOCKED = our network would not let us reach the publisher; it says nothing about the endpoint itself.
-      await prisma.source.update({ where: { id: sourceId }, data: { lastFetchAt: now(), lastError: message, lastErrorKind: failureKind, consecutiveFailures: { increment: 1 }, endpointStatus: failureKind === "NETWORK_POLICY_BLOCKED" ? "BLOCKED" : "FAILING" } });
+      await prisma.source.update({ where: { id: sourceId }, data: { lastFetchAt: now(), lastError: message, lastErrorKind: failureKind, consecutiveFailures: { increment: 1 }, nextAttemptAt: nextAttemptAfter(now(), source.pollIntervalMinutes, source.consecutiveFailures + 1), endpointStatus: failureKind === "NETWORK_POLICY_BLOCKED" ? "BLOCKED" : "FAILING" } });
       return { ...base, runId: run.id, status: "FAILED", error: message, failureKind };
     }
     const ctx = await loadContext();
@@ -208,21 +243,23 @@ export async function runSource(sourceId: string, trigger: Trigger, opts: FetchO
       where: { id: run.id },
       data: { status, finishedAt: now(), httpStatus: result.httpStatus, itemsFetched: result.items.length, itemsNew, itemsDuplicate, itemsFailed, pagesFetched: result.pages ?? 1, errors: JSON.stringify(errors.slice(0, 50)) },
     });
-    await prisma.source.update({ where: { id: sourceId }, data: { lastFetchAt: now(), lastSuccessAt: now(), lastError: null, lastErrorKind: null, consecutiveFailures: 0, endpointStatus: "WORKING" } });
+    await prisma.source.update({ where: { id: sourceId }, data: { lastFetchAt: now(), lastSuccessAt: now(), lastError: null, lastErrorKind: null, consecutiveFailures: 0, nextAttemptAt: nextAttemptAfter(now(), source.pollIntervalMinutes, 0), endpointStatus: "WORKING" } });
     return { ...base, runId: run.id, status, itemsFetched: result.items.length, itemsNew, itemsDuplicate, itemsFailed };
   } finally {
-    running.delete(sourceId);
+    await releaseLease(sourceId).catch(() => undefined);
   }
 }
 
 /** Sources due for polling: enabled, automatic adapter, interval elapsed (with exponential backoff after failures). */
+/** Sources due for polling: enabled, automatic adapter, persisted retry time reached, not leased elsewhere. */
 export async function dueSources(at = new Date()) {
-  const sources = await prisma.source.findMany({ where: { enabled: true, adapter: { not: "MANUAL" } } });
-  return sources.filter((s) => {
-    if (!s.lastFetchAt) return true;
-    const backoff = Math.min(2 ** Math.min(s.consecutiveFailures, 4), 16);
-    const intervalMs = s.pollIntervalMinutes * 60_000 * backoff;
-    return at.getTime() - s.lastFetchAt.getTime() >= Math.min(intervalMs, 6 * 3600_000);
+  return prisma.source.findMany({
+    where: {
+      enabled: true,
+      adapter: { not: "MANUAL" },
+      AND: [{ OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: at } }] }, { OR: [{ leaseUntil: null }, { leaseUntil: { lt: at } }] }],
+    },
+    orderBy: { nextAttemptAt: "asc" },
   });
 }
 

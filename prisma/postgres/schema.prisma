@@ -1,3 +1,6 @@
+// GENERATED from prisma/schema.prisma by `npm run db:pg:sync` — do not edit by hand.
+// PostgreSQL schema for production. Models are identical to the canonical SQLite schema.
+
 // VIGIL OUTBREAK — database schema.
 //
 // Principles (see README "Data integrity"):
@@ -17,7 +20,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model Disease {

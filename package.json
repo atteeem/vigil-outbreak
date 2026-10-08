@@ -18,10 +18,16 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "verify:sources": "tsx scripts/verify-sources.ts",
-    "ingest:backfill": "tsx scripts/ingest.ts --pages 4"
+    "ingest:backfill": "tsx scripts/ingest.ts --pages 4",
+    "worker": "tsx scripts/worker.ts",
+    "db:pg:sync": "node scripts/db-pg-sync.mjs",
+    "db:pg:check": "node scripts/db-pg-sync.mjs --check",
+    "db:check": "node scripts/db-check.mjs",
+    "test:pg": "node scripts/test-pg.mjs"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "better-sqlite3": "^13.0.3",
     "clsx": "^2.1.1",
@@ -29,6 +35,7 @@
     "lucide-react": "^1.46.0",
     "maplibre-gl": "^6.10.0",
     "next": "^16.3.5",
+    "pg": "^8.23.1",
     "prisma": "^7.10.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -43,6 +50,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "@types/topojson-client": "^3.1.5",

@@ -1,6 +1,6 @@
 // Read model for the public UI. Every query takes `asOf` (null = live). Historical views only include rows
 // whose PUBLICATION time is <= asOf, and verdicts (verification, reclassification) reached later are hidden.
-import { prisma } from "@/lib/db";
+import { prisma, containsCI } from "@/lib/db";
 import { summarizeCases, seriesFor, verificationAt, type CaseSummary } from "@/lib/domain/stats";
 import { isConfirmedActive, isInvestigation, CLASSIFICATIONS, type Metric } from "@/lib/domain/enums";
 import { countryName } from "@/lib/geo/countries";
@@ -211,8 +211,11 @@ export interface FreshnessDTO {
 }
 
 export async function getFreshness(now = new Date()): Promise<FreshnessDTO> {
-  const sources = await prisma.source.findMany({ where: { adapter: { not: "MANUAL" } }, orderBy: { name: "asc" } });
-  const live = computeLiveStatus(sources, now);
+  const [sources, beat] = await Promise.all([
+    prisma.source.findMany({ where: { adapter: { not: "MANUAL" } }, orderBy: { name: "asc" } }),
+    prisma.workerHeartbeat.findFirst({ orderBy: { lastTickAt: "desc" } }),
+  ]);
+  const live = computeLiveStatus(sources, now, beat);
   return {
     lastSuccessAt: live.lastLiveSuccessAt,
     lastAttemptAt: live.lastLiveAttemptAt,
@@ -417,7 +420,7 @@ export async function search(q: string) {
   if (term.length < 2) return { outbreaks: [], articles: [] };
   const [outbreaks, articles] = await Promise.all([
     listOutbreaks(null, { q: term }),
-    prisma.sourceArticle.findMany({ where: { OR: [{ title: { contains: term } }, { summary: { contains: term } }], reviewStatus: { in: ["ACCEPTED", "PENDING"] } }, orderBy: { publishedAt: "desc" }, take: 8, include: { source: true, outbreak: { select: { slug: true } } } }),
+    prisma.sourceArticle.findMany({ where: { OR: [{ title: containsCI(term) }, { summary: containsCI(term) }], reviewStatus: { in: ["ACCEPTED", "PENDING"] } }, orderBy: { publishedAt: "desc" }, take: 8, include: { source: true, outbreak: { select: { slug: true } } } }),
   ]);
   return {
     outbreaks: outbreaks.slice(0, 8).map((o) => ({ slug: o.slug, title: o.title, classification: o.classification, countryName: o.countryName })),

@@ -14,7 +14,9 @@ Host not in allowlist: www.who.int. Add this host to your network egress setting
 ```
 
 The request never reached WHO, CDC or ECDC. That rules out a malformed request, a wrong endpoint and missing
-authentication, but it also means none of them was proven correct. The adapters classify this case as
+authentication, but it also means none of them was proven correct. The full-pipeline run from the sandbox is in
+[`verification/2026-10-08-pipeline-sandbox.json`](verification/2026-10-08-pipeline-sandbox.json): all targets
+`BLOCKED_BY_NETWORK`, exit code 2. The adapters classify this case as
 `NETWORK_POLICY_BLOCKED` and mark the source `BLOCKED`, not `FAILING`. The captured report is in
 [`verification/2026-10-08-build-sandbox.json`](verification/2026-10-08-build-sandbox.json).
 
@@ -30,33 +32,40 @@ npx prisma migrate deploy && npm run db:seed
 Node 22 or later. Behind a corporate proxy, export `HTTPS_PROXY` and, on Node versions that support it, set `NODE_USE_ENV_PROXY=1`
 so `fetch` uses the proxy. If the proxy inspects TLS, also set `NODE_EXTRA_CA_CERTS`.
 
-## 2. Check every endpoint (stores nothing)
+## 2. Verify every source end to end
 
 ```bash
 npm run verify:sources
 ```
 
-This checks every configured automatic source that has a URL, plus WHO's two sibling routes as diagnostics.
-For each one it runs:
+Targets: WHO Disease Outbreak News, CDC Content Services (`q=outbreak`), and every feed listed on ECDC's
+official page https://www.ecdc.europa.eu/en/rss-feeds (discovered from that page; if discovery fails, the
+third-party-reported News feed is checked and labelled as a fallback).
 
-| Check | Meaning |
+For each target, every stage must pass before it is reported **`PIPELINE_VERIFIED`**:
+
+| Stage | Requirement |
 |---|---|
-| reachable | HTTP 2xx. On failure, the failure class (below) and a hint |
-| schema | Items parse in the documented format: WHO OData `value[]` with Title/PublicationDate/UrlName; CDC `results[]` with name/sourceUrl/datePublished; RSS or Atom items with title/link/date |
-| freshness | Newest item is no more than 45 days old (otherwise WARN) |
-| timestamps | Publication times parse and are not in the future |
-| ordering | Newest first (WHO, CDC) |
-| pagination | Page 2 (`$skip` for WHO, `pagenum` for CDC) returns different, older items |
+| endpoint | HTTP 2xx; documented schema; freshness (≤45 days); timestamps; newest-first; page 2 differs and is older |
+| ingest | The real pipeline (`runSource`) stores ≥1 record; a reachable endpoint with nothing stored FAILS |
+| persistence | Stored rows = reported new rows; each has URL, title, publisher type, `origin=INGESTED`, run id |
+| dates | 100% valid, non-future publication dates (event dates are reported) |
+| geography / disease | WHO: ≥60% of records with a country and ≥60% with a disease or unknown-cause flag (FAIL below). CDC/ECDC: WARN below 25% |
+| dedupe | An immediate second run stores 0 new rows; row count unchanged |
 
-Exit codes: `0` everything verified, `2` blocked by local network policy, `1` a source failed or is degraded.
-A JSON report is written to `reports/`.
+Ingestion happens in a **throwaway SQLite database** (`prisma/verify.db`, recreated each run, gitignored). Your
+working database is untouched unless you pass `--update-db`, which only records verdicts on existing sources and
+never enables them.
 
-Useful variants:
+Exit codes: `0` all verified end to end · `2` everything not verified was blocked by local network policy · `1`
+any other failure. A JSON report is written to `reports/`.
 
 ```bash
-npm run verify:sources -- --only who-don                    # one source
-npm run verify:sources -- --url "https://www.ecdc.europa.eu/en/taxonomy/term/1307/feed" --adapter RSS
-npm run verify:sources -- --update-db                       # record results on each Source (never enables)
+npm run verify:sources -- --only who-don            # who-don | cdc-content | ecdc
+npm run verify:sources -- --url "https://…/feed" --adapter RSS
+npm run verify:sources -- --update-db
+npm run verify:sources -- --pages 2                 # ingest two pages per paged source
+npm run verify:sources -- --endpoint-only           # reachability/schema only; does NOT prove ingestion
 ```
 
 Raw sanity check with curl:
@@ -65,6 +74,8 @@ Raw sanity check with curl:
 curl -s "https://www.who.int/api/news/diseaseoutbreaknews?\$orderby=PublicationDate%20desc&\$top=2" | head -c 600
 curl -s "https://tools.cdc.gov/api/v2/resources/media?q=outbreak&max=2" | head -c 600
 ```
+
+Windows (PowerShell) equivalents: `docs/LOCAL_SETUP_WINDOWS.md` §6 and §10.
 
 ## 3. Enable what verified
 
@@ -78,7 +89,8 @@ curl -s "https://tools.cdc.gov/api/v2/resources/media?q=outbreak&max=2" | head -
 ## 4. Confirm the public UI
 
 - The nav indicator shows **Live** only after a real (non-localhost) source has succeeded within two polling
-  intervals. Until then it says **Not live** or **Stale**.
+  intervals **and** an ingestion process (dev server, `npm run worker`, or cron) has run recently. Until then it
+  says **Not live** or **Stale**.
 - Overview → KPI **Last successful live ingestion** shows the timestamp of that success.
 - `/intelligence`: newly retrieved items carry an **Auto-ingested** badge with their retrieval time. The initial
   dataset carries **Seeded**.

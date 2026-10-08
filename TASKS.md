@@ -27,7 +27,7 @@ Legend: [x] done · [~] partial · [ ] open · [!] blocked
 - [x] Admin: sources, logs, review, outbreak create/edit, reclassification, claim verification/promotion, observations, updates/corrections, merge, publish/unpublish, audit
 
 ## Phase E — Reliability
-- [x] Vitest unit + DB integration (66 tests), Playwright desktop + mobile (25 tests), typecheck, lint, production build
+- [x] Vitest unit + DB integration (88 tests; also on PostgreSQL), Playwright desktop + mobile (25 tests), typecheck, lint, production build
 - [x] README
 
 ## Milestone: Live data reliability (2026-10-08)
@@ -43,9 +43,22 @@ Legend: [x] done · [~] partial · [ ] open · [!] blocked
 - [ ] Run `npm run verify:sources` from an unrestricted network; enable what passes
 - [ ] Validate the 15 Irkutsk checklist items against primary publications
 
+## Milestone: Real-network validation prep + production readiness (2026-10-08)
+- [x] Bundle verified to contain 61946e6 before work began
+- [x] `verify:sources` is now a full-pipeline check (endpoint → ingest → persistence → dates → geography/disease → dedupe) in a throwaway DB; only PIPELINE_VERIFIED counts; ECDC feeds discovered from ECDC's official RSS page; Windows-safe (no shell/sandbox dependencies)
+- [x] PostgreSQL support: generated schema + baseline migration (`prisma/postgres/`), adapter chosen from DATABASE_URL, case-insensitive search; 88/88 Vitest + app/worker smoke on PostgreSQL 16
+- [x] Reproducible migrations: `db:check` (no drift), `db:pg:sync` (offline schema-to-schema diffs)
+- [x] Ingestion separated from the web process: INGESTION_MODE (inline/worker/off), `npm run worker`, cron via `ingest -- --due`
+- [x] Idempotency: unique (sourceId, externalId) + canonicalUrl; concurrent unique violations count as duplicates
+- [x] Cross-process per-source leases; abandoned runs closed; persisted `nextAttemptAt` backoff with jitter
+- [x] In-run retries for transient failures (timeouts, connection, 5xx, 429 + Retry-After); never for policy/auth/404/schema
+- [x] Worker heartbeat; Live indicator requires recent real success AND recent heartbeat; `/api/health` (+ `?strict=1`)
+- [x] docs/LOCAL_SETUP_WINDOWS.md, docs/DEPLOYMENT.md, updated LIVE_SOURCE_VERIFICATION.md
+- [!] Real-source runs (WHO, CDC, ECDC) — must be executed outside the sandbox (`npm run verify:sources` on your computer)
+
 ## Next
 - [ ] Re-verify seeded facts against the original WHO/ECDC/Reuters pages once network access is available
 - [ ] Manual article entry form in admin (articles currently arrive via ingestion or seed)
 - [ ] Sub-national geocoding beyond the city gazetteer (e.g. Nominatim, as in VIGIL) with precision tracking
-- [ ] PostgreSQL deployment profile; multi-user admin accounts
+- [ ] Multi-user admin accounts (PostgreSQL profile done)
 - [ ] Optional LLM-assisted claim extraction (left out of the MVP to avoid paid APIs; extraction is deterministic)

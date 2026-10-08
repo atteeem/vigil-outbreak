@@ -2,8 +2,12 @@
 
 An evidence-based monitoring platform for outbreaks, emerging pathogens, unexplained illnesses and official
 public-health investigations. Architecture follows [VIGIL](https://github.com/atteeem/vigil) (Next.js App Router,
-Prisma 7 + SQLite driver adapter, MapLibre, HMAC admin gate, in-process scheduler), as an independent codebase
-with no dependency on it.
+Prisma 7 driver adapters, MapLibre, HMAC admin gate), as an independent codebase with no dependency on it.
+SQLite for local development, PostgreSQL for production; ingestion runs in a separate worker or cron job.
+
+**Windows:** step-by-step PowerShell instructions are in [`docs/LOCAL_SETUP_WINDOWS.md`](docs/LOCAL_SETUP_WINDOWS.md).
+**Deployment readiness:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). **Live-source checks:**
+[`docs/LIVE_SOURCE_VERIFICATION.md`](docs/LIVE_SOURCE_VERIFICATION.md).
 
 **Featured record:** `/outbreaks/russia-irkutsk-2026`. This is a fatal pneumonia of undetermined cause in an Irkutsk
 anti-plague institute worker. It is classified as an **unconfirmed investigation**. Plague (*Yersinia pestis*, a
@@ -19,23 +23,29 @@ npm run db:seed                   # diseases, sources, sourced outbreak records
 npm run dev                       # http://localhost:3000  (admin: /admin)
 ```
 
-Production: `npm run build && npm start`. Requires Node 22 or later.
+Production: `npm run build && npm start` plus `npm run worker` (or cron `npm run ingest -- --due`). Requires Node 22
+or later.
 
 | Command | Purpose |
 | --- | --- |
 | `npm run ingest` / `npm run ingest -- --due` | One-shot ingestion of all enabled sources, or only those due (cron-friendly; exit code 2 if a source failed) |
 | `npm run ingest:backfill` | Same, following up to 4 upstream pages per source |
-| `npm run verify:sources` | Live-source verification: reachability, schema, freshness, ordering, paging. Stores nothing; exit code 2 means blocked by network policy. See `docs/LIVE_SOURCE_VERIFICATION.md` |
-| `npm test` | Vitest: unit tests plus DB-backed integration tests of every adapter through the real pipeline (throwaway `prisma/vitest.db`) |
+| `npm run verify:sources` | **Full-pipeline** check of WHO, CDC Content Services and ECDC's officially listed feeds. A source counts as verified only if real records are retrieved, parsed, stored, have dates/geography/disease extracted and deduplicate on a second run. Uses a throwaway DB. Exit 0 = all verified, 2 = blocked by network. See `docs/LIVE_SOURCE_VERIFICATION.md` |
+| `npm run worker` | Standalone ingestion worker (production): polls due sources, writes a heartbeat, stops gracefully |
+| `npm run db:deploy` / `npm run db:check` | Apply migrations / verify migrations reproduce the schema and the DB has no drift |
+| `npm run db:pg:sync -- <name>` | After editing `prisma/schema.prisma`: regenerate the PostgreSQL schema and its migration (offline) |
+| `npm run test:pg` | The Vitest suite against PostgreSQL (`TEST_DATABASE_URL`, DB name must contain "test") |
+| `npm test` | Vitest: 88 unit + DB-backed integration tests (adapters through the real pipeline, verifier, retries, leases, concurrency) on a throwaway `prisma/vitest.db` |
 | `npm run test:e2e` | Playwright, desktop and Pixel 7. Builds its own `prisma/test.db` and serves fixtures, so no external network is needed |
 | `npm run typecheck` / `npm run lint` | TypeScript / ESLint |
 
 If you use a different Chromium, set `PLAYWRIGHT_CHROMIUM_PATH`. Otherwise run `npx playwright install chromium`.
 
-**PostgreSQL:** set `provider = "postgresql"` in `prisma/schema.prisma` and point `DATABASE_URL` at your database.
-Then swap the adapter in `lib/db.ts` for `@prisma/adapter-pg` and run `npx prisma migrate dev`. Enum-like fields are
-strings, so no model changes are needed. SQLite is the default because no Postgres server was available in the
-build environment.
+**PostgreSQL:** set `DATABASE_URL=postgresql://…`, then `npm run db:generate && npm run db:deploy && npm run db:seed`.
+`prisma.config.ts` and `lib/db.ts` pick the PostgreSQL schema, migrations (`prisma/postgres/`) and driver from the
+URL. The PostgreSQL schema is generated from the canonical SQLite schema (`npm run db:pg:sync`). All 88 Vitest
+tests and an app/worker smoke test were run on PostgreSQL 16 in the build environment. Details:
+`docs/DEPLOYMENT.md`.
 
 ## Pages
 
@@ -104,10 +114,13 @@ The flow is fetch, normalize, extract, associate, dedupe, store, then flag confl
   ever substituted for missing data.
 - **Enabling.** New sources are created disabled. An automatic source can be enabled only after **Test endpoint**
   has observed a valid response.
-- **Scheduling.** `instrumentation.ts` starts an in-process scheduler that checks every 60 s which sources are due.
-  Each source has its own interval, defaulting to `INGESTION_INTERVAL_MINUTES=15`. Alternatively, set
-  `DISABLE_INGESTION_SCHEDULER=1` and run `npm run ingest -- --due` from cron. `npm run ingest:backfill` reads 4
-  pages per source.
+- **Scheduling.** `INGESTION_MODE` decides where it runs: `inline` (development default; in-process scheduler
+  started by `instrumentation.ts`), `worker` (production default; `npm run worker` or cron) or `off`. Each pass
+  polls sources whose persisted `nextAttemptAt` is due. Per-source database leases prevent concurrent fetches
+  across processes, transient errors are retried with backoff, and every pass writes a heartbeat.
+- **Intervals.** Each source has its own polling interval (default `INGESTION_INTERVAL_MINUTES=15`); after failures
+  it backs off ×2 per consecutive failure (max ×16, capped at 6 h). `npm run ingest:backfill` reads 4 pages per
+  source.
 - **Public visibility.** Official publications appear in the feed straight away, labelled "awaiting review".
   Media items appear only after an analyst accepts them.
 
@@ -115,7 +128,9 @@ The flow is fetch, normalize, extract, associate, dedupe, store, then flag confl
 
 - **The UI never claims to be live without evidence.** The nav indicator, the overview banner and the KPI
   **Last successful live ingestion** are computed in `lib/domain/live-status.ts` from successes of real sources
-  only; localhost and fixture sources never count. "Live" requires a success within two polling intervals. If
+  only; localhost and fixture sources never count. "Live" requires a success within two polling intervals **and** a
+  recent ingestion-process heartbeat, so a stopped worker cannot keep the indicator green. `/api/health` exposes
+  the same state for monitoring (`?strict=1` returns 503 unless live). If
   every enabled source is failing, the UI says **Not live**, names the failure class, and states that the data
   shown is seeded or previously retrieved.
 - **Every article is labelled Seeded or Auto-ingested** (feed, outbreak sources, admin review), and auto-ingested
@@ -156,10 +171,11 @@ that was approximate is noted in the row. Re-seeding never overwrites an operato
 app/                 pages + API routes (app/api/admin/* gated by proxy.ts)
 components/          map, dashboard, outbreak, admin, ui
 lib/domain/          enums, case-statistics rules, timeline model
-lib/ingestion/       adapters, normalize, extract, match, pipeline, scheduler
+lib/ingestion/       adapters, normalize, extract, match, pipeline (leases, retries), tick/scheduler, verify, pipeline-verify, discover
 lib/server/queries.ts  as-of-aware read model
 lib/geo/             country + city gazetteers
-prisma/              schema, migrations, seed
+prisma/              canonical schema (SQLite), migrations, seed; prisma/postgres/ generated PostgreSQL schema + migrations
+scripts/             worker, ingest, verify-sources, db-check, db-pg-sync, test-pg (all cross-platform Node)
 tests/unit|integration|e2e, tests/fixtures
 ```
 
