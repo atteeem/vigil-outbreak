@@ -1,6 +1,7 @@
 // Ingestion pipeline: fetch -> normalize -> extract -> associate -> dedupe -> store -> flag conflicts.
 // Failures are recorded on the run and the source; nothing is ever substituted for missing upstream data.
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { canonicalizeUrl, shortSummary, titleHash } from "./normalize";
 import { extract, type DiseaseKeywords } from "./extract";
 import { matchOutbreak, type OutbreakCandidate } from "./match";
@@ -123,7 +124,7 @@ export async function storeItem(
   });
   if (near) return "duplicate";
 
-  const claims = x.counts.map((c) => ({
+  const claims: Prisma.EvidenceClaimCreateManyInput[] = x.counts.map((c) => ({
     articleId: article.id,
     claimType: claimTypeFor(c.metric),
     text: c.metric ? `${c.text} (${METRIC_LABEL[c.metric]})` : `${c.text} (unqualified case count — not classified as confirmed, probable or suspected)`,
@@ -134,7 +135,7 @@ export async function storeItem(
     extractedBy: "AUTO",
     publishedAt: item.publishedAt,
   }));
-  if (x.unknownCause) claims.push({ articleId: article.id, claimType: "PATHOGEN_ID", text: "Publication describes the cause as unknown/undetermined.", metric: null, value: null as unknown as number, attributedTo: null, sourceType, extractedBy: "AUTO", publishedAt: item.publishedAt });
+  if (x.unknownCause) claims.push({ articleId: article.id, claimType: "PATHOGEN_ID", text: "Publication describes the cause as unknown/undetermined.", metric: null, value: null, attributedTo: null, sourceType, extractedBy: "AUTO", publishedAt: item.publishedAt });
   if (claims.length) await prisma.evidenceClaim.createMany({ data: claims });
   if (suggestedOutbreakId) await flagConflicts(article.id, suggestedOutbreakId);
   return "new";

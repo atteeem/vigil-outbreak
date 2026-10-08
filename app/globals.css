@@ -1,0 +1,91 @@
+@import "tailwindcss";
+@source not "../public";
+@source not "../prisma";
+@source not "../.next-test";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --color-bg: #07080a;
+  --color-surface: #0c0e11;
+  --color-panel: #101317;
+  --color-raised: #151a1f;
+  --color-hover: #1a2027;
+  --color-line: rgba(255, 255, 255, 0.07);
+  --color-line-strong: rgba(255, 255, 255, 0.13);
+
+  --color-ink: #e6e9ee;
+  --color-ink-dim: #98a1ad;
+  --color-ink-faint: #5f6873;
+
+  --color-accent: #3fd0c9;
+  --color-accent-dim: rgba(63, 208, 201, 0.12);
+  --color-warn: #e9b949;
+  --color-danger: #ef6a5a;
+  --color-ok: #4fd18b;
+
+  /* Classification palette — mirrors CLASSIFICATION_HEX in lib/domain/enums.ts. Evidence status, not severity. */
+  --color-cls-investigation: #7aa7ff;
+  --color-cls-suspected: #c79bff;
+  --color-cls-localized: #f2b84b;
+  --color-cls-widespread: #f07a4b;
+  --color-cls-resolved: #7d8794;
+
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+}
+
+@layer base {
+  * { border-color: var(--color-line); }
+  html { color-scheme: dark; }
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-feature-settings: "tnum" 1, "cv11" 1;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  :where(a, button, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  ::selection { background: var(--color-accent-dim); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.09); border-radius: 999px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  select, input, textarea { background: var(--color-surface); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+  html[data-reduce-motion="true"] *, html[data-reduce-motion="true"] *::before { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+@layer components {
+  .panel { background: var(--color-panel); border: 1px solid var(--color-line); border-radius: 10px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--color-line); }
+  .eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-ink-faint); }
+  .field { width: 100%; border: 1px solid var(--color-line-strong); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--color-ink); }
+  .field:hover { border-color: rgba(255, 255, 255, 0.2); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-line-strong); border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 500; color: var(--color-ink); background: var(--color-raised); transition: background 0.15s, border-color 0.15s; }
+  .btn:hover:not(:disabled) { background: var(--color-hover); border-color: rgba(255, 255, 255, 0.22); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-accent { background: var(--color-accent-dim); border-color: rgba(63, 208, 201, 0.4); color: var(--color-accent); }
+  .btn-danger { color: var(--color-danger); border-color: rgba(239, 106, 90, 0.35); }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .prose-tight p + p { margin-top: 0.5rem; }
+}
+
+.maplibregl-ctrl-group { background: var(--color-panel) !important; border: 1px solid var(--color-line-strong); box-shadow: none !important; }
+.maplibregl-ctrl-group button + button { border-top-color: var(--color-line) !important; }
+.maplibregl-ctrl-icon { filter: invert(0.85); }
+.maplibregl-ctrl-attrib { background: rgba(7, 8, 10, 0.7) !important; color: var(--color-ink-faint) !important; font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: var(--color-ink-dim) !important; }
+.maplibregl-ctrl-attrib-button { filter: invert(1); }
+.maplibregl-popup-content { background: var(--color-raised) !important; color: var(--color-ink); border: 1px solid var(--color-line-strong); border-radius: 8px !important; padding: 8px 10px !important; font-size: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important; }
+.maplibregl-popup-tip { border-top-color: var(--color-raised) !important; border-bottom-color: var(--color-raised) !important; }
