@@ -14,9 +14,8 @@ export function canonicalizeUrl(raw: string): string {
     const params = [...u.searchParams.entries()].filter(([k]) => !TRACKING_PARAMS.test(k)).sort(([a], [b]) => a.localeCompare(b));
     u.search = "";
     for (const [k, v] of params) u.searchParams.append(k, v);
-    let s = u.toString();
-    if (s.endsWith("/") && u.pathname !== "/") s = s.slice(0, -1);
-    return s;
+    if (u.pathname !== "/") u.pathname = u.pathname.replace(/\/+$/, "");
+    return u.toString();
   } catch {
     return input;
   }

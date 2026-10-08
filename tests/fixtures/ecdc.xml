@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Fixture ECDC feed</title>
+    <link>https://www.ecdc.europa.eu</link>
+    <item>
+      <title>Fixture: Communicable disease threats report, week 41</title>
+      <link>https://www.ecdc.europa.eu/en/publications-data/fixture-cdtr-week-41?utm_source=rss</link>
+      <guid>fixture-cdtr-41</guid>
+      <pubDate>Fri, 03 Oct 2026 14:00:00 GMT</pubDate>
+      <description><![CDATA[<p>Mpox clade Ib: 4 confirmed cases in Germany.</p>]]></description>
+    </item>
+    <item>
+      <title>Fixture: Item without a date</title>
+      <link>https://www.ecdc.europa.eu/en/fixture-nodate</link>
+    </item>
+  </channel>
+</rss>

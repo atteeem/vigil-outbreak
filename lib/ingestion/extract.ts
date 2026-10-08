@@ -51,7 +51,7 @@ export interface ExtractedCount {
 // Order matters: specific observation/contact patterns run first and claim their text span, so "200 people
 // under observation" can never also be read as "200 ... cases".
 const PATTERNS: { metric: Metric | null; re: RegExp }[] = [
-  { metric: "UNDER_OBSERVATION", re: new RegExp(String.raw`${QUALIFIER}${NUM}\s+(?:people|persons|contacts|individuals|residents|staff|employees|close contacts)?\s*(?:who\s+\w+\s+)?(?:were\s+|are\s+|have been\s+|had been\s+)?(?:placed\s+|kept\s+|remain\s+)?(?:under|in)\s+(?:medical\s+)?(?:observation|isolation|quarantine|supervision|monitoring)`, "gi") },
+  { metric: "UNDER_OBSERVATION", re: new RegExp(String.raw`${QUALIFIER}${NUM}\s+(?:people|persons|contacts|individuals|residents|staff|employees|close contacts|cases|patients)?\s*(?:who\s+\w+\s+)?(?:were\s+|are\s+|have been\s+|had been\s+)?(?:placed\s+|kept\s+|remain\s+)?(?:under|in)\s+(?:medical\s+)?(?:observation|isolation|quarantine|supervision|monitoring)`, "gi") },
   { metric: "UNDER_OBSERVATION", re: new RegExp(String.raw`${QUALIFIER}${NUM}\s+(?:close\s+)?contacts\s+(?:are\s+being|were|have been)\s+(?:monitored|traced|followed up)`, "gi") },
   { metric: "CONTACTS_TESTED_NEGATIVE", re: new RegExp(String.raw`${QUALIFIER}${NUM}\s+(?:contacts|people|samples|persons)\s+(?:have\s+|had\s+)?tested\s+negative`, "gi") },
   { metric: "HOSPITALIZED", re: new RegExp(String.raw`${QUALIFIER}${NUM}\s+(?:people|persons|patients|contacts)?\s*(?:were\s+|have been\s+)?(?:hospitali[sz]ed|admitted to hospital)`, "gi") },

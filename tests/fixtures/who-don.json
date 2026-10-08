@@ -1,0 +1,28 @@
+{
+  "@odata.context": "https://www.who.int/api/news/$metadata#diseaseoutbreaknews",
+  "value": [
+    {
+      "Id": "fixture-0001",
+      "DonId": "2026-DON-FX1",
+      "Title": "Fixture: Pneumonia of unknown origin - Russian Federation",
+      "UrlName": "2026-DON-FX1",
+      "PublicationDate": "2026-10-07T09:00:00Z",
+      "Summary": "<p>On 2 October 2026, a laboratory worker died of severe pneumonia in Shelekhov, Irkutsk Oblast. The cause remains of unknown origin. Nearly 200 people were placed under observation. No confirmed cases of plague have been reported.</p>",
+      "Overview": "<p>Authorities report that 150 contacts have tested negative.</p>"
+    },
+    {
+      "Id": "fixture-0002",
+      "DonId": "2026-DON-FX2",
+      "Title": "Fixture: Cholera - Republic of Fixturia (Sudan)",
+      "UrlName": "2026-DON-FX2",
+      "PublicationDate": "2026-10-06T12:00:00Z",
+      "Summary": "<p>As of 30 September 2026, Sudan reported 1,234 suspected cases of cholera and 12 confirmed cases, including 3 deaths.</p>"
+    },
+    {
+      "Id": "fixture-0003",
+      "Title": "",
+      "UrlName": "2026-DON-BROKEN",
+      "PublicationDate": "2026-10-05T12:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "value": [
+    {
+      "Id": "fixture-0001",
+      "DonId": "2026-DON-FX1",
+      "Title": "Fixture: Pneumonia of unknown origin - Russian Federation",
+      "UrlName": "2026-DON-FX1",
+      "PublicationDate": "2026-10-07T09:00:00Z",
+      "Summary": "<p>Same item again (must be deduplicated).</p>"
+    },
+    {
+      "Id": "fixture-0004",
+      "DonId": "2026-DON-FX4",
+      "Title": "Fixture: Avian influenza A(H5N1) - Cambodia",
+      "UrlName": "2026-DON-FX4",
+      "PublicationDate": "2026-10-07T15:00:00Z",
+      "Summary": "<p>One laboratory-confirmed human case of avian influenza A(H5N1) was reported in Cambodia.</p>"
+    }
+  ]
+}
