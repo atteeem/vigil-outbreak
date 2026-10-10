@@ -1,9 +1,11 @@
-// Non-destructive reference-data refresh: upserts the disease list (names, agents, extractor keywords).
-// Touches nothing else — outbreaks, articles, claims, sources and analyst work are left exactly as they are.
+// Non-destructive reference-data refresh: upserts the disease list (names, agents, extractor keywords) and makes
+// sure the tracked-event configuration exists (Irkutsk investigation as the primary subject, its precautionary
+// location, the Rospotrebnadzor source, tracked-article tags). Never deletes or overwrites analyst work.
 //   npm run db:reference
 import "dotenv/config";
 import { prisma } from "../lib/db";
 import { DISEASES } from "../prisma/reference/diseases";
+import { ensureTrackedEvents } from "../lib/tracked/store";
 
 async function main() {
   let created = 0;
@@ -16,7 +18,10 @@ async function main() {
     else created++;
   }
   await prisma.adminAuditLog.create({ data: { action: "reference.diseases", entityType: "system", details: JSON.stringify({ created, updated }), actor: "cli" } });
-  console.log(`Diseases: ${created} added, ${updated} refreshed (${DISEASES.length} total). Nothing else was changed.`);
+  console.log(`Diseases: ${created} added, ${updated} refreshed (${DISEASES.length} total).`);
+  const tracked = await ensureTrackedEvents();
+  if (tracked.length) await prisma.adminAuditLog.create({ data: { action: "reference.tracked", entityType: "system", details: JSON.stringify(tracked), actor: "cli" } });
+  console.log(tracked.length ? `Tracked events: ${tracked.join("; ")}.` : "Tracked events: already configured.");
 }
 
 main()

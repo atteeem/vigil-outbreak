@@ -33,6 +33,14 @@ export function verificationAt(status: string, verifiedAt: Date | null | undefin
   return verifiedAt.getTime() > asOf.getTime() ? "UNVERIFIED" : status;
 }
 
+/** Claims: in a historical view a verdict (and any conflict note) is only shown once it had been reached. A verdict
+ * without a recorded date is not shown in the past at all (we cannot tell when it became known). */
+export function claimVerdictAt(status: string, reviewedAt: Date | null | undefined, asOf: Date | null): { status: string; showConflict: boolean } {
+  if (!asOf) return { status, showConflict: true };
+  if (!reviewedAt || reviewedAt.getTime() > asOf.getTime()) return { status: "UNVERIFIED", showConflict: false };
+  return { status, showConflict: true };
+}
+
 export function visibleAt<T extends { reportedAt: Date }>(rows: readonly T[], asOf: Date | null): T[] {
   if (!asOf) return [...rows];
   const t = asOf.getTime();

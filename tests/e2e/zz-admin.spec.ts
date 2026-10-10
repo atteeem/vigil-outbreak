@@ -79,7 +79,7 @@ test.describe("ingestion via admin", () => {
     await expect(page.getByTestId("runs-table")).toContainText("Publisher server error (5xx)");
 
     // Persisted and visible: official publications appear in the public feed, labelled as auto-ingested.
-    await page.goto("/intelligence?q=Fixture");
+    await page.goto("/intelligence?scope=all&q=Fixture");
     await expect(page.getByTestId("feed-list")).toContainText("Fixture: Cholera");
     await expect(page.getByTestId("feed-list")).toContainText("Fixture: Measles outbreak");
     await expect(page.getByTestId("feed-list")).toContainText("awaiting review");

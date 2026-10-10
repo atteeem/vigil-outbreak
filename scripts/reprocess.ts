@@ -8,6 +8,7 @@
 import "dotenv/config";
 import { prisma } from "../lib/db";
 import { reprocessArticles } from "../lib/ingestion/reprocess";
+import { tagUntrackedArticles } from "../lib/tracked/store";
 
 const apply = process.argv.includes("--apply");
 const all = process.argv.includes("--all");
@@ -16,6 +17,10 @@ reprocessArticles({ apply, all, log: (l) => console.log(l) })
   .then((r) => {
     console.log(`\n${r.examined} ingested articles examined; ${r.changed} ${apply ? "updated" : "would change"}; ${r.skipped} skipped (raw payload not re-parseable). Content types: ${Object.entries(r.byType).map(([k, v]) => `${k} ${v}`).join(", ") || "—"}.`);
     if (!apply && r.changed) console.log("Dry run only. Re-run with --apply to write these changes.");
+  })
+  .then(async () => {
+    // Tags articles that are about a tracked event (only the tracked* fields; nothing else changes).
+    if (apply) console.log(`Tracked-event tags added: ${await tagUntrackedArticles()}.`);
   })
   .catch((e) => {
     console.error(e);

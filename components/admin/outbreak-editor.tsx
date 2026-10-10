@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAction, Flash } from "./use-action";
+import { LocationsEditor, type EditorLocation } from "./locations-editor";
+import { TIMELINE_CATEGORIES, TIMELINE_CATEGORY_LABEL } from "@/lib/tracked/timeline";
 import { ClaimRow } from "./review-queue";
 import { ClassificationBadge, SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
 import { CLASSIFICATIONS, CLASSIFICATION_LABEL, METRICS, METRIC_LABEL, PATHOGEN_STATUSES, PATHOGEN_STATUS_LABEL, UPDATE_KINDS, UPDATE_KIND_LABEL, VERIFICATION_STATUSES, type Metric } from "@/lib/domain/enums";
@@ -12,7 +14,7 @@ import { fmtUtc } from "@/lib/utils";
 
 interface O {
   id: string; slug: string; title: string; summary: string; classification: string; pathogenStatus: string; published: boolean; featured: boolean; diseaseId: string | null; suspectedDiseaseId: string | null; lastVerifiedAt: string | null; mergedInto: { id: string; title: string } | null;
-  locations: { id: string; name: string; lat: number; lng: number; precision: string; role: string }[];
+  locations: EditorLocation[];
   observations: { id: string; metric: string; value: number | null; valueHigh: number | null; asOfDate: string | null; reportedAt: string; sourceType: string; verificationStatus: string; attributedTo: string | null }[];
   updates: { id: string; kind: string; title: string; publishedAt: string; sourceType: string; verificationStatus: string }[];
   statusHistory: { id: string; toClassification: string; toPathogenStatus: string; reason: string; effectiveAt: string }[];
@@ -35,7 +37,7 @@ export function OutbreakEditor({ o, diseases, others }: { o: O; diseases: { id: 
   const [suspected, setSuspected] = useState(o.suspectedDiseaseId ?? "");
   const [cls, setCls] = useState({ classification: o.classification, pathogenStatus: o.pathogenStatus, diseaseId: o.diseaseId ?? "", reason: "", effectiveAt: nowLocal(), sourceArticleId: "" });
   const [obs, setObs] = useState({ metric: "CONFIRMED_CASES", value: "", valueHigh: "", asOfDate: "", reportedAt: nowLocal(), sourceType: "OFFICIAL", verificationStatus: "UNVERIFIED", attributedTo: "", notes: "", deathCauseConfirmed: "", isCumulative: true, sourceArticleId: "" });
-  const [upd, setUpd] = useState({ kind: "DEVELOPMENT", title: "", body: "", occurredAt: "", publishedAt: nowLocal(), sourceType: "OFFICIAL", verificationStatus: "UNVERIFIED", attributedTo: "", sourceArticleId: "" });
+  const [upd, setUpd] = useState({ kind: "DEVELOPMENT", category: "", title: "", body: "", occurredAt: "", publishedAt: nowLocal(), sourceType: "OFFICIAL", verificationStatus: "UNVERIFIED", attributedTo: "", sourceArticleId: "" });
   const [merge, setMerge] = useState({ targetId: "", reason: "" });
   const sel = (on: (v: string) => void) => (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement | HTMLTextAreaElement>) => on(e.target.value);
   const articleOptions = <><option value="">No linked article</option>{o.articles.map((a) => <option key={a.id} value={a.id}>{fmtUtc(a.publishedAt, false)} · {a.title.slice(0, 70)}</option>)}</>;
@@ -54,6 +56,8 @@ export function OutbreakEditor({ o, diseases, others }: { o: O; diseases: { id: 
       {o.mergedInto && <p className="text-xs text-warn">Merged into <Link className="underline" href={`/admin/outbreaks/${o.mergedInto.id}`}>{o.mergedInto.title}</Link>.</p>}
       <Flash error={error} message={message} />
 
+      <LocationsEditor outbreakId={o.id} locations={o.locations} articles={o.articles} />
+
       <div className="grid gap-4 xl:grid-cols-2">
         <Card title="Record">
           <input className="field" value={title} onChange={sel(setTitle)} aria-label="Title" />
@@ -64,7 +68,6 @@ export function OutbreakEditor({ o, diseases, others }: { o: O; diseases: { id: 
             <button className="btn" disabled={!!busy} onClick={() => run("feat", `/api/admin/outbreaks/${o.id}`, "PATCH", { featured: !o.featured })}>{o.featured ? "Unfeature" : "Feature"}</button>
             <button className="btn" disabled={!!busy} onClick={() => run("lv", `/api/admin/outbreaks/${o.id}`, "PATCH", { lastVerifiedAt: new Date().toISOString() }, () => "Marked verified now.")}>Mark verified now</button>
           </div>
-          <p className="text-ink-faint">Locations: {o.locations.map((l) => `${l.name} (${l.precision.toLowerCase()}, ${l.lat.toFixed(2)}, ${l.lng.toFixed(2)})`).join(" · ") || "none"}</p>
         </Card>
 
         <Card title="Reclassify (appends history)">
@@ -114,9 +117,10 @@ export function OutbreakEditor({ o, diseases, others }: { o: O; diseases: { id: 
         </Card>
 
         <Card title="Add update / correction">
-          <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void run("upd", `/api/admin/outbreaks/${o.id}/updates`, "POST", { ...upd, occurredAt: upd.occurredAt ? iso(upd.occurredAt) : null, publishedAt: iso(upd.publishedAt), sourceArticleId: upd.sourceArticleId || null }, () => "Update added."); }}>
+          <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void run("upd", `/api/admin/outbreaks/${o.id}/updates`, "POST", { ...upd, category: upd.category || null, occurredAt: upd.occurredAt ? iso(upd.occurredAt) : null, publishedAt: iso(upd.publishedAt), sourceArticleId: upd.sourceArticleId || null }, () => "Update added."); }}>
             <div className="grid grid-cols-2 gap-2">
               <select className="field" value={upd.kind} onChange={sel((v) => setUpd((s) => ({ ...s, kind: v })))} aria-label="Kind">{UPDATE_KINDS.map((k) => <option key={k} value={k}>{UPDATE_KIND_LABEL[k]}</option>)}</select>
+              <select className="field" value={upd.category} onChange={sel((v) => setUpd((s) => ({ ...s, category: v })))} aria-label="Update category"><option value="">Timeline category: derive from text</option>{TIMELINE_CATEGORIES.map((c) => <option key={c} value={c}>{TIMELINE_CATEGORY_LABEL[c]}</option>)}</select>
               <select className="field" value={upd.sourceType} onChange={sel((v) => setUpd((s) => ({ ...s, sourceType: v })))} aria-label="Source type"><option value="OFFICIAL">Official</option><option value="MEDIA">Media</option></select>
               <label className="text-ink-faint">Occurred (UTC, optional)<input className="field" type="datetime-local" value={upd.occurredAt} onChange={sel((v) => setUpd((s) => ({ ...s, occurredAt: v })))} /></label>
               <label className="text-ink-faint">Published (UTC)<input className="field" type="datetime-local" value={upd.publishedAt} onChange={sel((v) => setUpd((s) => ({ ...s, publishedAt: v })))} required /></label>

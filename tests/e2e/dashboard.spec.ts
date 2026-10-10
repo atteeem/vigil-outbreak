@@ -3,9 +3,9 @@ import { trackErrors, waitForMap } from "./helpers";
 
 test("overview loads with KPIs, map, list and no console errors", async ({ page }) => {
   const errors = trackErrors(page);
-  await page.goto("/");
+  await page.goto("/global");
   await expect(page.getByRole("link", { name: "VIGIL OUTBREAK home" })).toBeVisible();
-  for (const l of ["Overview", "Live Map", "Outbreaks", "Intelligence", "Analytics"]) await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: l })).toBeVisible();
+  for (const l of ["Investigation", "Live Map", "Timeline", "Intelligence", "Global watch", "Analytics"]) await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: l })).toBeVisible();
   await expect(page.getByTestId("kpi-investigations")).toContainText("1");
   await expect(page.getByTestId("kpi-refresh")).toContainText("Last successful live ingestion");
   await expect(page.getByTestId("kpi-refresh")).toContainText("None yet");
@@ -28,7 +28,7 @@ test("overview loads with KPIs, map, list and no console errors", async ({ page 
 });
 
 test("Russia investigation: list click opens details, map marker is an investigation, full page is sourced", async ({ page }) => {
-  await page.goto("/map");
+  await page.goto("/global/map");
   await waitForMap(page);
   await page.getByTestId("outbreak-item-russia-irkutsk-2026").click();
   const panel = page.getByTestId("detail-panel");
@@ -64,7 +64,7 @@ test("Russia investigation: list click opens details, map marker is an investiga
 });
 
 test("clicking the map marker selects the investigation", async ({ page }) => {
-  await page.goto("/map");
+  await page.goto("/global/map");
   const map = await waitForMap(page);
   await page.evaluate(() => (window as unknown as { __outbreakMap: { jumpTo: (o: unknown) => void } }).__outbreakMap.jumpTo({ center: [104.2, 52.25], zoom: 6 }));
   await page.waitForTimeout(1200);
@@ -78,7 +78,7 @@ test("clicking the map marker selects the investigation", async ({ page }) => {
 });
 
 test("filters change the displayed results", async ({ page }) => {
-  await page.goto("/map");
+  await page.goto("/global/map");
   await waitForMap(page);
   const count = page.getByTestId("list-count");
   await expect(count).toHaveText("6/6");
@@ -97,7 +97,7 @@ test("filters change the displayed results", async ({ page }) => {
 });
 
 test("timeline: presets, scrubbing, stepping, play/pause and return to live", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/global");
   await waitForMap(page);
   const tl = page.getByTestId("timeline-controls");
   await tl.getByRole("radio", { name: "30D" }).click();
@@ -138,7 +138,7 @@ test("outbreaks, intelligence, analytics and settings pages work", async ({ page
   await expect(page.getByTestId("outbreaks-count")).toContainText("2 of 6");
   await page.goto("/outbreaks?q=irkutsk");
   await expect(page.getByTestId("outbreak-card-russia-irkutsk-2026")).toBeVisible();
-  await page.goto("/intelligence?sourceType=OFFICIAL");
+  await page.goto("/intelligence?scope=all&sourceType=OFFICIAL");
   await expect(page.getByTestId("feed-item").first()).toBeVisible();
   await expect(page.getByTestId("feed-list")).not.toContainText("The Moscow Times");
   await page.goto("/analytics");

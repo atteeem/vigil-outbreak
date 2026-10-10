@@ -20,7 +20,7 @@ test("official report → ingest → review → new outbreak → verify location
 
   // A visitor already has the Live Map open.
   const viewer = await context.newPage();
-  await viewer.goto("/map");
+  await viewer.goto("/global/map");
   const viewerMap = await waitForMap(viewer);
   const markersBefore = Number(await viewerMap.getAttribute("data-marker-count"));
   await expect(viewer.getByTestId(`outbreak-item-${SLUG}`)).toHaveCount(0);

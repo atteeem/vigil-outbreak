@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/admin/audit";
 import { json, parseBody, fail, handleError } from "@/lib/server/http";
+import { TIMELINE_CATEGORIES } from "@/lib/tracked/timeline";
 import { UPDATE_KINDS, SOURCE_TYPES, VERIFICATION_STATUSES } from "@/lib/domain/enums";
 
 const Body = z.object({
@@ -14,6 +15,8 @@ const Body = z.object({
   verificationStatus: z.enum(VERIFICATION_STATUSES),
   attributedTo: z.string().min(2).max(300),
   sourceArticleId: z.string().nullable().optional(),
+  /** Timeline category override; null = derived from the text. */
+  category: z.enum(TIMELINE_CATEGORIES).nullable().optional(),
 });
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {

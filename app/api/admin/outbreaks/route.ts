@@ -2,7 +2,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/admin/audit";
 import { json, parseBody, fail, handleError } from "@/lib/server/http";
-import { CLASSIFICATIONS, PATHOGEN_STATUSES, GEO_PRECISIONS, LOCATION_ROLES } from "@/lib/domain/enums";
+import { locationVerdict } from "@/lib/tracked/timeline";
+import { CLASSIFICATIONS, PATHOGEN_STATUSES, GEO_PRECISIONS, LOCATION_ROLES, VERIFICATION_STATUSES } from "@/lib/domain/enums";
 import { countryByCode } from "@/lib/geo/countries";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,9 @@ export const LocationInput = z.object({
   precision: z.enum(GEO_PRECISIONS),
   role: z.enum(LOCATION_ROLES),
   notes: z.string().max(1000).nullable().optional(),
+  verificationStatus: z.enum(VERIFICATION_STATUSES).optional(),
+  evidence: z.string().max(2000).nullable().optional(),
+  sourceArticleId: z.string().nullable().optional(),
 });
 
 const Create = z.object({
@@ -49,13 +53,15 @@ export async function POST(req: Request) {
     if (d.pathogenStatus === "CONFIRMED" && !d.diseaseId) return fail("A confirmed pathogen status requires a confirmed disease", 422);
     if (await prisma.outbreak.findUnique({ where: { slug: d.slug } })) return fail("Slug already in use", 409);
     const first = new Date(d.firstReportedAt);
+    const verdict = d.location ? locationVerdict(d.location, { countryCode: country.code, admin1: null }) : null;
+    if (verdict && !verdict.ok) return fail(verdict.error, 422);
     const outbreak = await prisma.outbreak.create({
       data: {
         slug: d.slug, title: d.title, summary: d.summary, classification: d.classification, pathogenStatus: d.pathogenStatus,
         diseaseId: d.pathogenStatus === "CONFIRMED" ? d.diseaseId : null, suspectedDiseaseId: d.suspectedDiseaseId ?? null,
         countryCode: country.code, countryName: country.name, firstReportedAt: first, eventStartDate: d.eventStartDate ? new Date(d.eventStartDate) : null, published: d.published,
         statusHistory: { create: { toClassification: d.classification, toPathogenStatus: d.pathogenStatus, reason: d.reason, effectiveAt: first, actor: "admin" } },
-        locations: d.location ? { create: { ...d.location, firstReportedAt: first } } : undefined,
+        locations: d.location && verdict?.ok ? { create: { ...d.location, verificationStatus: verdict.verificationStatus, verifiedAt: verdict.verificationStatus === "VERIFIED" ? new Date() : null, firstReportedAt: first } } : undefined,
       },
     });
     await audit("outbreak.create", "outbreak", outbreak.id, { slug: d.slug });

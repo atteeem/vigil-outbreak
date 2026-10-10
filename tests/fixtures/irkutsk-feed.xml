@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic test fixture (not real reporting): items that are / are not about the Irkutsk investigation. -->
+<rss version="2.0">
+  <channel>
+    <title>Fixture health authority news</title>
+    <link>https://fixture.example/news</link>
+    <description>Test feed</description>
+    <item>
+      <title>Fixture: Laboratory tests of Irkutsk contacts negative for plague</title>
+      <link>https://fixture.example/news/irk-lab-tests</link>
+      <guid>irk-lab-tests</guid>
+      <pubDate>Thu, 08 Oct 2026 09:00:00 GMT</pubDate>
+      <description>The regional health authority said PCR tests of all remaining contacts of the deceased laboratory worker from the Irkutsk Anti-Plague Research Institute were negative for Yersinia pestis. The cause of the worker's pneumonia remains undetermined.</description>
+    </item>
+    <item>
+      <title>Fixture: Second suspected case reported at Shelekhov hospital</title>
+      <link>https://fixture.example/news/shelekhov-second-case</link>
+      <guid>shelekhov-second-case</guid>
+      <pubDate>Thu, 08 Oct 2026 11:00:00 GMT</pubDate>
+      <description>Regional media reported that a nurse at the Shelekhov district hospital was hospitalised with fever and is being tested. Authorities have not confirmed any infection.</description>
+    </item>
+    <item>
+      <title>Fixture: В Иркутске продлили карантин для контактных лиц</title>
+      <link>https://fixture.example/news/irk-quarantine-ru</link>
+      <guid>irk-quarantine-ru</guid>
+      <pubDate>Thu, 08 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Карантин для контактных лиц в Иркутске продлён ещё на семь дней, сообщил Роспотребнадзор.</description>
+    </item>
+    <item>
+      <title>Fixture: Kazakhstan investigates suspected case in traveller from Irkutsk</title>
+      <link>https://fixture.example/news/kz-traveller</link>
+      <guid>kz-traveller</guid>
+      <pubDate>Thu, 08 Oct 2026 13:00:00 GMT</pubDate>
+      <description>Health officials in Kazakhstan are testing a traveller who recently visited Irkutsk and developed pneumonia. No link to the Irkutsk investigation has been established.</description>
+    </item>
+    <item>
+      <title>Fixture: Plague concerns grow across Siberia</title>
+      <link>https://fixture.example/news/siberia-plague</link>
+      <guid>siberia-plague</guid>
+      <pubDate>Thu, 08 Oct 2026 14:00:00 GMT</pubDate>
+      <description>Commentators discuss plague preparedness in Siberia after recent reports.</description>
+    </item>
+    <item>
+      <title>Fixture: Plague case confirmed in Madagascar</title>
+      <link>https://fixture.example/news/madagascar-plague</link>
+      <guid>madagascar-plague</guid>
+      <pubDate>Thu, 08 Oct 2026 15:00:00 GMT</pubDate>
+      <description>Madagascar's health ministry confirmed a case of bubonic plague in the central highlands.</description>
+    </item>
+    <item>
+      <title>Fixture: Irkutsk airport reopens after heavy snowfall</title>
+      <link>https://fixture.example/news/irk-airport</link>
+      <guid>irk-airport</guid>
+      <pubDate>Thu, 08 Oct 2026 16:00:00 GMT</pubDate>
+      <description>Flights resumed at Irkutsk airport on Thursday.</description>
+    </item>
+  </channel>
+</rss>

@@ -8,8 +8,13 @@ import { COUNTRIES } from "@/lib/geo/countries";
 import { ContentTypeBadge, OriginBadge, SourceTypeBadge, VerificationBadge } from "@/components/ui/badges";
 import { Time } from "@/components/ui/time";
 import { EmptyState } from "@/components/ui/empty-state";
+import { TopicChips } from "@/components/tracker/parts";
+import { getPrimaryTrackedEvent } from "@/lib/server/tracker";
+import { TOPIC_LABEL, TRACKED_TOPICS } from "@/lib/tracked/relevance";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+type Scope = "tracked" | "other" | "all";
 export const metadata: Metadata = { title: "Intelligence" };
 
 export default async function IntelligencePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -18,18 +23,44 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
   const st = one(sp.sourceType);
   const sourceType = st === "OFFICIAL" || st === "MEDIA" ? st : null;
   const includeAllTypes = one(sp.types) === "all";
-  const [items, diseases] = await Promise.all([listFeed(asOf, { ...query, sourceType, includeAllTypes }, 150), prisma.disease.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } })]);
+  const tracked = await getPrimaryTrackedEvent();
+  // Default: reports about the tracked investigation. Unrelated news is a secondary section.
+  const scopeParam = one(sp.scope);
+  const scope: Scope = !tracked ? "all" : scopeParam === "other" || scopeParam === "all" ? scopeParam : "tracked";
+  const topic = one(sp.topic);
+  const trackedFilter = scope === "tracked" && tracked ? { mode: "only" as const, eventId: tracked.id } : scope === "other" ? { mode: "exclude" as const } : null;
+  const [all, diseases] = await Promise.all([listFeed(asOf, { ...query, sourceType, includeAllTypes, tracked: trackedFilter }, 150), prisma.disease.findMany({ orderBy: { name: "asc" }, select: { slug: true, name: true } })]);
+  const items = scope === "tracked" && topic ? all.filter((i) => i.trackedTopics.includes(topic)) : all;
+  const tab = (s: Scope) => `/intelligence${s === "tracked" ? "" : `?scope=${s}`}`;
   return (
     <main className="mx-auto max-w-[1100px] px-3 pb-12 pt-4 sm:px-4">
       <h1 className="text-xl font-semibold tracking-tight">Intelligence feed</h1>
+      {tracked && (
+        <nav className="my-3 flex flex-wrap gap-1 border-b border-line" aria-label="Feed sections" data-testid="intel-tabs">
+          {([["tracked", `${tracked.name}`], ["other", "Other infectious disease news"], ["all", "Everything"]] as [Scope, string][]).map(([s, label]) => (
+            <Link key={s} href={tab(s)} aria-current={scope === s ? "page" : undefined} data-testid={`intel-tab-${s}`} className={cn("-mb-px border-b-2 px-3 py-1.5 text-[13px]", scope === s ? "border-accent text-ink" : "border-transparent text-ink-dim hover:text-ink")}>{label}</Link>
+          ))}
+        </nav>
+      )}
+      {scope === "tracked" && (
+        <div className="mb-3 space-y-2" data-testid="intel-tracked-intro">
+          <p className="text-xs text-ink-dim">Publications identified as being about the {tracked?.name}: they name its places (Irkutsk, Shelekhov, the anti-plague institute) together with event-specific context. Wider-area matches (e.g. &ldquo;Siberia&rdquo; + plague) only go to analyst review. A topic tag says what an article is about, not that its claim is true.</p>
+          <div className="flex flex-wrap gap-1 text-[11px]" data-testid="intel-topics">
+            <Link href={tab("tracked")} className={cn("rounded-full border px-2.5 py-0.5", !topic ? "border-accent/50 text-accent" : "border-line-strong text-ink-dim")}>All topics</Link>
+            {TRACKED_TOPICS.map((t) => <Link key={t} href={`/intelligence?topic=${t}`} data-testid={`intel-topic-${t}`} className={cn("rounded-full border px-2.5 py-0.5", topic === t ? "border-accent/50 text-accent" : "border-line-strong text-ink-dim")}>{TOPIC_LABEL[t]}</Link>)}
+          </div>
+        </div>
+      )}
+      {scope === "other" && <p className="mb-3 text-xs text-ink-dim" data-testid="intel-other-intro">Infectious-disease news not identified as being about the {tracked?.name}. A report from another country is only associated with the investigation after an analyst has evidence for it.</p>}
       <p className="mb-4 text-xs text-ink-dim">Ingested and analyst-entered publications. Official publications appear immediately (marked “awaiting review” until an analyst reviews them); media reports appear only after review. Each item keeps its original source and is labelled “Seeded” (hand-compiled initial data) or “Auto-ingested” (retrieved by the pipeline). Guidance, podcasts, corporate and general publications are hidden unless you choose “All publication types”; they are never linked to outbreaks or counted as cases.</p>
       <form method="get" className="panel mb-3 grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]" role="search">
+        {scope !== "tracked" && <input type="hidden" name="scope" value={scope} />}
         <input name="q" defaultValue={filters.q} className="field" placeholder="Search headlines…" aria-label="Search" />
         <select name="disease" defaultValue={filters.disease} className="field" aria-label="Disease"><option value="">All pathogens</option><option value="unknown">Unknown cause / unspecified</option>{diseases.map((d) => <option key={d.slug} value={d.slug}>{d.name}</option>)}</select>
         <select name="country" defaultValue={filters.country} className="field" aria-label="Country"><option value="">All countries</option>{COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}</select>
         <select name="sourceType" defaultValue={sourceType ?? ""} className="field" aria-label="Source type"><option value="">Official + media</option><option value="OFFICIAL">Official only</option><option value="MEDIA">Media only</option></select>
         <select name="types" defaultValue={includeAllTypes ? "all" : ""} className="field" aria-label="Publication types" data-testid="feed-types"><option value="">Outbreak-related only</option><option value="all">All publication types</option></select>
-        <div className="flex gap-2"><button className="btn btn-accent" type="submit">Apply</button><Link className="btn" href="/intelligence">Reset</Link></div>
+        <div className="flex gap-2"><button className="btn btn-accent" type="submit">Apply</button><Link className="btn" href={tab(scope)}>Reset</Link></div>
       </form>
       {items.length === 0 ? <EmptyState title="No reports match" testId="feed-empty">Nothing has been ingested for these filters yet.</EmptyState> : (
         <ul className="panel divide-y divide-line" data-testid="feed-list">
@@ -41,6 +72,8 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
                 <OriginBadge origin={i.origin} fetchedAt={i.fetchedAt} />
                 <ContentTypeBadge type={i.contentType} relevant={i.outbreakRelevant} />
                 {i.reviewStatus === "PENDING" && <span className="rounded border border-warn/30 px-1.5 text-[10px] uppercase tracking-wide text-warn">awaiting review</span>}
+                {i.trackedLevel === "DIRECT" && scope !== "tracked" && <span className="rounded border border-accent/40 px-1.5 text-[10px] text-accent" data-testid="tracked-badge">{tracked?.name}</span>}
+                <TopicChips topics={i.trackedTopics} />
                 <span className="text-ink-dim">{i.organization}</span>· published <Time iso={i.publishedAt} />{i.origin === "INGESTED" && <> · retrieved <Time iso={i.fetchedAt} /></>}
               </div>
               {i.outbreak ? (

@@ -10,6 +10,7 @@ import "dotenv/config";
 import { prisma } from "../lib/db";
 import { canonicalizeUrl, titleHash } from "../lib/ingestion/normalize";
 import { DISEASES } from "./reference/diseases";
+import { ensureTrackedEvents } from "../lib/tracked/store";
 
 const D = (iso: string) => new Date(iso);
 const intervalMinutes = Number(process.env.INGESTION_INTERVAL_MINUTES) || 15;
@@ -100,6 +101,7 @@ async function main() {
   const existingSeeded = await prisma.outbreak.count({ where: { slug: { in: SEED_SLUGS } } });
   if (existingSeeded > 0 && !process.argv.includes("--reset-seeded-outbreaks")) {
     console.log(`Seeded outbreaks already present (${existingSeeded}); kept as they are. Reference data refreshed. Use --reset-seeded-outbreaks to recreate them.`);
+    for (const c of await ensureTrackedEvents()) console.log(`Tracked events: ${c}`);
     return;
   }
   await prisma.outbreak.deleteMany({ where: { slug: { in: SEED_SLUGS } } });
@@ -191,18 +193,18 @@ async function main() {
   const C = (articleKey: string, claimType: string, text: string, sourceType: string, verificationStatus: string, attributedTo: string, extra: Record<string, unknown> = {}) => ({ articleId: A(articleKey), outbreakId: ru.id, claimType, text, sourceType, verificationStatus, attributedTo, extractedBy: "SEED", publishedAt: [...RU_ARTICLES].find((a) => a.key === articleKey)!.publishedAt, ...extra });
   await prisma.evidenceClaim.createMany({
     data: [
-      C("mt-1002", "PATHOGEN_ID", "The worker died from plague.", "MEDIA", "DISPUTED", "The Moscow Times (headline)", { conflictNote: "Contradicted by Rospotrebnadzor (pneumonia of unknown origin) and by WHO (no confirmed cause)." }),
-      C("cnn-1004", "PATHOGEN_ID", "The woman died from an unspecified form of plague.", "OFFICIAL", "DISPUTED", "Buryatia governor Alexei Tsydenov (reported; later softened)", { conflictNote: "Regional official statement later softened; federal health authority does not confirm plague." }),
+      C("mt-1002", "PATHOGEN_ID", "The worker died from plague.", "MEDIA", "DISPUTED", "The Moscow Times (headline)", { conflictNote: "Contradicted by Rospotrebnadzor (pneumonia of unknown origin) and by WHO (no confirmed cause).", reviewedAt: D("2026-10-05T12:00:00Z") }),
+      C("cnn-1004", "PATHOGEN_ID", "The woman died from an unspecified form of plague.", "OFFICIAL", "DISPUTED", "Buryatia governor Alexei Tsydenov (reported; later softened)", { conflictNote: "Regional official statement later softened; federal health authority does not confirm plague.", reviewedAt: D("2026-10-05T12:00:00Z") }),
       C("meduza-1005", "PATHOGEN_ID", "Death attributed to pneumonia of unknown origin; no microorganisms linked to the worker's professional activity found.", "OFFICIAL", "VERIFIED", "Rospotrebnadzor", { reviewedAt: D("2026-10-05T12:00:00Z") }),
-      C("mt-1002", "OTHER", "The technician broke a test tube containing plague bacteria on 25 September.", "MEDIA", "DISPUTED", "Lyudi Baikala (as cited)", { conflictNote: "Rospotrebnadzor states no accident involving pathogenic microorganisms occurred at the institute." }),
-      C("meduza-1005", "STATEMENT", "No accident involving pathogenic microorganisms occurred at the institute.", "OFFICIAL", "DISPUTED", "Rospotrebnadzor", { conflictNote: "Contradicts the Lyudi Baikala account of a broken test tube; no independent investigation reported." }),
+      C("mt-1002", "OTHER", "The technician broke a test tube containing plague bacteria on 25 September.", "MEDIA", "DISPUTED", "Lyudi Baikala (as cited)", { conflictNote: "Rospotrebnadzor states no accident involving pathogenic microorganisms occurred at the institute.", reviewedAt: D("2026-10-05T12:00:00Z") }),
+      C("meduza-1005", "STATEMENT", "No accident involving pathogenic microorganisms occurred at the institute.", "OFFICIAL", "DISPUTED", "Rospotrebnadzor", { conflictNote: "Contradicts the Lyudi Baikala account of a broken test tube; no independent investigation reported.", reviewedAt: D("2026-10-05T12:00:00Z") }),
       C("meduza-1005", "OTHER", "Alternative account: the patient was admitted after returning from Thailand.", "MEDIA", "UNVERIFIED", "Regional media (as summarised by international outlets)"),
-      C("mt-1002", "OBSERVATION_COUNT", "Nearly 200 people under observation.", "MEDIA", "UNVERIFIED", "The Moscow Times", { metric: "UNDER_OBSERVATION", value: 200, conflictNote: "Later reports give 189 under observation of 197 identified contacts." }),
+      C("mt-1002", "OBSERVATION_COUNT", "Nearly 200 people under observation.", "MEDIA", "UNVERIFIED", "The Moscow Times", { metric: "UNDER_OBSERVATION", value: 200, conflictNote: "Later reports give 189 under observation of 197 identified contacts.", reviewedAt: D("2026-10-06T12:00:00Z") }),
       C("en-1006", "OBSERVATION_COUNT", "Between 189 and 197 contacts placed under observation and quarantine.", "MEDIA", "UNVERIFIED", "Euronews, citing independent and regional media", { metric: "UNDER_OBSERVATION", value: 189 }),
       C("en-1006", "STATEMENT", "No pathogens of dangerous infections found among tested contacts; some positive for colds or COVID-19.", "OFFICIAL", "VERIFIED", "Rospotrebnadzor (via Euronews)", { reviewedAt: D("2026-10-06T12:00:00Z") }),
       C("nbc-1006", "STATEMENT", "No plague case recorded in Irkutsk; no plague or other high-threat pathogen among close contacts (WHO awaiting confirmation from Russia).", "OFFICIAL", "VERIFIED", "WHO (via NBC News)", { reviewedAt: D("2026-10-06T13:00:00Z") }),
       C("nbc-1006", "STATEMENT", "Contact testing found 2 COVID-19 and 2 rhinovirus infections and no plague; about 60% of identified contacts tested so far.", "OFFICIAL", "VERIFIED", "Rospotrebnadzor (via NBC News)", { reviewedAt: D("2026-10-06T13:00:00Z") }),
-      C("nbc-1006", "PATHOGEN_ID", "The illness was initially described as a typical acute respiratory viral infection.", "OFFICIAL", "DISPUTED", "Rospotrebnadzor (early statement, as reported)", { conflictNote: "Superseded by Rospotrebnadzor's later description of pneumonia of unknown origin." }),
+      C("nbc-1006", "PATHOGEN_ID", "The illness was initially described as a typical acute respiratory viral infection.", "OFFICIAL", "DISPUTED", "Rospotrebnadzor (early statement, as reported)", { conflictNote: "Superseded by Rospotrebnadzor's later description of pneumonia of unknown origin.", reviewedAt: D("2026-10-06T13:00:00Z") }),
       C("ecdc-1006", "STATEMENT", "No reports of secondary cases and no evidence of sustained human-to-human transmission.", "OFFICIAL", "VERIFIED", "ECDC", { reviewedAt: D("2026-10-06T12:00:00Z") }),
       C("nw-1005", "RISK_ASSESSMENT", "Risk to the general population appears low (based on unofficial information).", "OFFICIAL", "VERIFIED", "WHO spokesperson", { reviewedAt: D("2026-10-05T18:00:00Z"), conflictNote: "A tiered WHO assessment (moderate-to-low for Irkutsk) circulates without a located primary source." }),
     ],
@@ -262,6 +264,7 @@ async function main() {
   await simple("yellow-fever-cote-divoire-2026", "Yellow fever — Côte d'Ivoire", "Listed in WHO AFRO's weekly bulletin on outbreaks and other emergencies, week 36 (31 August – 6 September 2026). Counts not captured.", "yellow-fever", "CONFIRMED_LOCALIZED", "CI", "Côte d'Ivoire", 7.5, -5.5, "afro-w36", D("2026-09-09T12:00:00Z"), "Listed as an ongoing event by WHO AFRO.");
 
   await prisma.adminAuditLog.create({ data: { action: "seed", entityType: "system", details: JSON.stringify({ outbreaks: SEED_SLUGS.length }), actor: "seed" } });
+  for (const c of await ensureTrackedEvents()) console.log(`Tracked events: ${c}`);
   console.log(`Seeded ${DISEASES.length} diseases, ${AUTO_SOURCES.length + MANUAL_SOURCES.length} sources, ${SEED_SLUGS.length} outbreaks.`);
 }
 

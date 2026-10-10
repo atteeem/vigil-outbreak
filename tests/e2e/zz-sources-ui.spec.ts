@@ -77,7 +77,7 @@ test("sources UI: save URL, test, enable, fetch now, fetch all, disable — each
 
   // Ingested entries appear in the public intelligence feed, labelled as auto-ingested and awaiting review.
   const title = row<{ title: string }>("SELECT title FROM SourceArticle WHERE sourceId = ? ORDER BY publishedAt DESC", src.id)!.title;
-  await page.goto("/intelligence?types=all");
+  await page.goto("/intelligence?scope=all&types=all");
   const item = page.getByTestId("feed-item").filter({ hasText: title });
   await expect(item).toBeVisible();
   await expect(item.getByTestId("origin-badge")).toHaveText("Auto-ingested");

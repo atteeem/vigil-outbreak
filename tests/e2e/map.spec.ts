@@ -34,7 +34,7 @@ test("live map: engine assets load, basemap and markers render from the API data
     const u = new URL(r.url());
     if (/maplibre-gl-(worker|shared)\.mjs$|\/geo\/|\/fonts\//.test(u.pathname)) assets.set(decodeURIComponent(u.pathname), { status: r.status(), type: r.headers()["content-type"] ?? "" });
   });
-  await page.goto("/map");
+  await page.goto("/global/map");
   const map = await waitForMap(page);
   await expect(map).toHaveAttribute("data-renderer", "webgl");
   await expect(map.locator("canvas")).toBeVisible();
@@ -68,7 +68,7 @@ test("live map: engine assets load, basemap and markers render from the API data
 });
 
 test("live map: hover shows a popup, clicking a marker opens its details, list selection highlights it", async ({ page }) => {
-  await page.goto("/map");
+  await page.goto("/global/map");
   await waitForMap(page);
   await expect.poll(async () => (await rendered(page, ["investigation"])).investigation, { timeout: 15_000 }).toBe(1);
   const box = (await page.getByTestId("outbreak-map").boundingBox())!;
@@ -88,7 +88,7 @@ test("live map: hover shows a popup, clicking a marker opens its details, list s
 });
 
 test("live map: filters and the timeline change the markers drawn", async ({ page }) => {
-  await page.goto("/map");
+  await page.goto("/global/map");
   const map = await waitForMap(page);
   await page.getByTestId("filter-status-UNCONFIRMED_INVESTIGATION").click();
   await expect(map).toHaveAttribute("data-marker-count", "1");
@@ -117,7 +117,7 @@ test("without WebGL2 the map falls back to a static map that still shows and sel
     } as typeof orig;
   });
   const errors = trackErrors(page);
-  await page.goto("/map");
+  await page.goto("/global/map");
   const map = page.getByTestId("outbreak-map");
   await expect(map).toHaveAttribute("data-renderer", "svg", { timeout: 20_000 });
   await expect(page.getByTestId("map-fallback-notice")).toContainText("WebGL2");
@@ -133,7 +133,7 @@ test("without WebGL2 the map falls back to a static map that still shows and sel
 
 test("if the MapLibre worker cannot load, the map says so and falls back instead of staying empty", async ({ page }) => {
   await page.route("**/maplibre-gl-worker.mjs", (r) => r.fulfill({ status: 404, body: "missing" }));
-  await page.goto("/map");
+  await page.goto("/global/map");
   const map = page.getByTestId("outbreak-map");
   await expect(map).toHaveAttribute("data-renderer", "svg", { timeout: 40_000 });
   await expect(page.getByTestId("map-fallback-notice")).toContainText("did not start");

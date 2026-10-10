@@ -49,6 +49,8 @@ export async function reprocessArticles(opts: { apply: boolean; all?: boolean; l
     }
     const { x, c } = deriveItem({ ...item, title: r.title, publishedAt: r.publishedAt }, r.source.adapter, keywords);
     byType[c.contentType] = (byType[c.contentType] ?? 0) + 1;
+    // Same rule as ingestion: a general/unclassified item directly about a tracked event stays outbreak-relevant.
+    const relevant = c.outbreakRelevant || (r.trackedLevel === "DIRECT" && (c.contentType === "GENERAL_PUBLICATION" || c.contentType === "UNCLASSIFIED"));
     const next = {
       countryCodes: JSON.stringify(x.countryCodes),
       mentionedCountryCodes: JSON.stringify(x.mentionedCountryCodes),
@@ -56,10 +58,10 @@ export async function reprocessArticles(opts: { apply: boolean; all?: boolean; l
       locationText: x.locationText,
       geoPrecision: x.geoPrecision,
       contentType: c.contentType,
-      outbreakRelevant: c.outbreakRelevant,
+      outbreakRelevant: relevant,
       classifierVersion: CLASSIFIER_VERSION,
       // Only the SUGGESTION is recomputed; an analyst-accepted link (outbreakId) is never touched.
-      suggestedOutbreakId: c.outbreakRelevant ? matchOutbreak(x, candidates) : null,
+      suggestedOutbreakId: relevant ? (matchOutbreak(x, candidates) ?? r.suggestedOutbreakId) : null,
     };
     const diff = (Object.keys(next) as (keyof typeof next)[]).filter((k) => k !== "classifierVersion" && String(r[k]) !== String(next[k]));
     if (diff.length) {

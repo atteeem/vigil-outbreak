@@ -81,7 +81,7 @@ export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 export const GEO_PRECISIONS = ["EXACT", "CITY", "ADMIN1", "COUNTRY", "UNKNOWN"] as const;
 export type GeoPrecision = (typeof GEO_PRECISIONS)[number];
 
-export const LOCATION_ROLES = ["INVESTIGATION_SITE", "CASE_LOCATION", "AFFECTED_AREA"] as const;
+export { LOCATION_ROLES } from "@/lib/tracked/timeline";
 
 export const UPDATE_KINDS = ["DEVELOPMENT", "OFFICIAL_STATEMENT", "MEASURE", "CORRECTION", "RECLASSIFICATION", "MEDIA_REPORT"] as const;
 export const UPDATE_KIND_LABEL: Record<string, string> = {

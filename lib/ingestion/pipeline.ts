@@ -1,5 +1,6 @@
 // Ingestion pipeline: fetch -> normalize -> extract -> associate -> dedupe -> store -> flag conflicts.
 // Failures are recorded on the run and the source; nothing is ever substituted for missing upstream data.
+import { bestTrackedMatch, loadTrackedContext, trackedFields, type TrackedContext } from "@/lib/tracked/store";
 import { hostname } from "node:os";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
@@ -89,7 +90,7 @@ async function loadContext() {
     classification: o.classification,
     locations: o.locations,
   }));
-  return { keywords, candidates };
+  return { keywords, candidates, tracked: await loadTrackedContext() };
 }
 
 export function safeJson<T>(s: string | null | undefined, fallback: T): T {
@@ -113,7 +114,7 @@ export async function storeItem(
   item: FetchedItem,
   source: { id: string; kind: string; adapter?: string },
   runId: string | null,
-  ctx: { keywords: DiseaseKeywords[]; candidates: OutbreakCandidate[] },
+  ctx: { keywords: DiseaseKeywords[]; candidates: OutbreakCandidate[]; tracked?: TrackedContext[] },
 ): Promise<"new" | "duplicate"> {
   const canonicalUrl = canonicalizeUrl(item.url);
   const existing = await prisma.sourceArticle.findUnique({ where: { canonicalUrl }, select: { id: true } });
@@ -136,8 +137,16 @@ export async function storeItem(
   const sourceType = source.kind === "OFFICIAL" ? "OFFICIAL" : "MEDIA";
   // Guidance, podcasts, corporate and general publications are kept and visible on request, but are never
   // associated with an outbreak and never produce case-count claims.
-  const suggestedOutbreakId = c.outbreakRelevant ? matchOutbreak(x, ctx.candidates) : null;
   const summary = item.text ? shortSummary(item.text) : null;
+  // Is it about a tracked event (e.g. the Irkutsk investigation)? Tags it and flags material changes for priority
+  // review; it never links, verifies or publishes anything.
+  // Guidance, podcasts and corporate items are never about an event; general/unclassified items can be (the
+  // content classifier does not read Russian, for example).
+  const trackable = c.outbreakRelevant || c.contentType === "GENERAL_PUBLICATION" || c.contentType === "UNCLASSIFIED";
+  const tracked = trackable && ctx.tracked?.length ? bestTrackedMatch({ title: item.title, summary, locationText: x.locationText, countryCodes: x.countryCodes }, ctx.tracked) : null;
+  // A direct match (the event's place names plus event-specific context) makes the item outbreak-relevant.
+  const relevant = c.outbreakRelevant || tracked?.match.level === "DIRECT";
+  const suggestedOutbreakId = relevant ? (matchOutbreak(x, ctx.candidates) ?? (tracked?.match.level === "DIRECT" ? tracked.event.outbreakId : null)) : null;
 
   // The unique keys (canonicalUrl; sourceId+externalId) make the insert itself idempotent: if another process stored
   // the same item between our checks and this insert, the violation is a duplicate, not an error.
@@ -159,7 +168,7 @@ export async function storeItem(
       countryCodes: JSON.stringify(x.countryCodes),
       mentionedCountryCodes: JSON.stringify(x.mentionedCountryCodes),
       contentType: c.contentType,
-      outbreakRelevant: c.outbreakRelevant,
+      outbreakRelevant: relevant,
       classifierVersion: CLASSIFIER_VERSION,
       diseaseSlugs: JSON.stringify(x.diseaseSlugs),
       locationText: x.locationText,
@@ -171,6 +180,7 @@ export async function storeItem(
       suggestedOutbreakId,
       raw: JSON.stringify(item.raw).slice(0, 100_000),
       origin: "INGESTED",
+      ...trackedFields(tracked),
     },
     });
   } catch (err) {
@@ -179,7 +189,7 @@ export async function storeItem(
   }
   if (near) return "duplicate";
 
-  if (!c.outbreakRelevant) return "new";
+  if (!relevant) return "new";
   const claims: Prisma.EvidenceClaimCreateManyInput[] = x.counts.map((c) => ({
     articleId: article.id,
     claimType: claimTypeFor(c.metric),

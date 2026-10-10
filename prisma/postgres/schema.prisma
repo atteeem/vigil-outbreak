@@ -77,8 +77,36 @@ model Outbreak {
   claims             EvidenceClaim[]
   statusHistory      InvestigationStatusHistory[]
   riskAssessments    RiskAssessment[]
+  trackedEvent       TrackedEvent?
 
   @@index([published, classification])
+}
+
+/// An emerging event the product is dedicated to tracking (e.g. the Irkutsk investigation). The primary active
+/// one is the subject of the main dashboard and map; others can be added later without code changes.
+model TrackedEvent {
+  id                String          @id @default(cuid())
+  outbreakId        String          @unique
+  outbreak          Outbreak        @relation(fields: [outbreakId], references: [id], onDelete: Cascade)
+  /// Short display name ("Irkutsk investigation").
+  name              String
+  primary           Boolean         @default(false)
+  active            Boolean         @default(true)
+  /// Country / first-level region where the event originated; case locations outside them count as spread.
+  originCountryCode String
+  originAdmin1      String?
+  /// JSON string[]: place/institution names; an article must mention one to be considered about this event.
+  anchorTerms       String
+  /// JSON string[]: event-specific context (pathogen, symptoms, agencies) required alongside a place name.
+  contextTerms      String
+  /// JSON string[]: wider-area terms that make an article only POSSIBLY related (sent to review, never shown as direct).
+  weakAnchorTerms   String          @default("[]")
+  mapCenterLat      Float
+  mapCenterLng      Float
+  mapZoom           Float           @default(8)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  articles          SourceArticle[]
 }
 
 model OutbreakLocation {
@@ -92,9 +120,15 @@ model OutbreakLocation {
   lng             Float
   /// EXACT | CITY | ADMIN1 | COUNTRY — how precisely the coordinates are known.
   precision       String
-  /// INVESTIGATION_SITE | CASE_LOCATION | AFFECTED_AREA
+  /// INVESTIGATION_SITE | CONFIRMED_CASE | SUSPECTED_CASE | PRECAUTIONARY_MEASURE | CASE_LOCATION | AFFECTED_AREA.
+  /// PRECAUTIONARY_MEASURE (quarantine, observation of contacts, closures) is never an infection.
   role            String
   notes           String?
+  /// UNVERIFIED | VERIFIED | DISPUTED | REFUTED. Only VERIFIED locations are drawn on the public map.
+  verificationStatus String     @default("VERIFIED")
+  /// Evidence supporting the location (required for case locations outside the event's origin).
+  evidence        String?
+  verifiedAt      DateTime?
   firstReportedAt DateTime
   sourceArticleId String?
   sourceArticle   SourceArticle? @relation(fields: [sourceArticleId], references: [id])
@@ -140,6 +174,9 @@ model OutbreakUpdate {
   outbreak           Outbreak       @relation(fields: [outbreakId], references: [id], onDelete: Cascade)
   /// DEVELOPMENT | OFFICIAL_STATEMENT | MEASURE | CORRECTION | RECLASSIFICATION | MEDIA_REPORT
   kind               String
+  /// Timeline category override (DEATH | SYMPTOMS | TESTING | QUARANTINE | STATEMENT | CORRECTION | EVIDENCE | CASES |
+  /// SPREAD). Null = derived from the text.
+  category           String?
   title              String
   body               String
   /// When the development happened (may be unknown).
@@ -263,6 +300,20 @@ model SourceArticle {
   origin             String                       @default("INGESTED")
   /// When an analyst confirmed a SEED/MANUAL article's facts against the primary publication (null = not yet).
   primaryValidatedAt DateTime?
+  /// Tracked event this article is about, set by lib/tracked/relevance.ts (never by hand-waving: needs a place name
+  /// plus event-specific context). Null = not about any tracked event.
+  trackedEventId     String?
+  trackedEvent       TrackedEvent?                @relation(fields: [trackedEventId], references: [id])
+  /// DIRECT (names the event's places + context) | POSSIBLE (wider-area match; needs analyst review)
+  trackedLevel       String?
+  trackedScore       Int?
+  /// JSON string[]: PATHOGEN | LAB_RESULTS | CONTACTS | TRANSMISSION | SPREAD | DEATH | CASES | MEASURES | STATEMENT | CORRECTION
+  trackedTopics      String                       @default("[]")
+  /// Human-readable reasons for the match (terms found).
+  trackedReasons     String?
+  /// Reports a potentially material change (new lab result, case, death, spread, correction): queued for priority
+  /// analyst review. Never published automatically.
+  materialChange     Boolean                      @default(false)
   claims             EvidenceClaim[]
   locations          OutbreakLocation[]
   observations       OutbreakObservation[]
@@ -271,6 +322,7 @@ model SourceArticle {
   statusChanges      InvestigationStatusHistory[]
 
   @@unique([sourceId, externalId])
+  @@index([trackedEventId, publishedAt])
   @@index([titleHash])
   @@index([publishedAt])
   @@index([reviewStatus])

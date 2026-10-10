@@ -1,7 +1,7 @@
 // Read model for the public UI. Every query takes `asOf` (null = live). Historical views only include rows
 // whose PUBLICATION time is <= asOf, and verdicts (verification, reclassification) reached later are hidden.
 import { prisma, containsCI } from "@/lib/db";
-import { summarizeCases, seriesFor, verificationAt, type CaseSummary } from "@/lib/domain/stats";
+import { claimVerdictAt, summarizeCases, seriesFor, verificationAt, type CaseSummary } from "@/lib/domain/stats";
 import { isConfirmedActive, isInvestigation, CLASSIFICATIONS, type Metric } from "@/lib/domain/enums";
 import { countryName } from "@/lib/geo/countries";
 import { safeJson } from "@/lib/ingestion/pipeline";
@@ -158,9 +158,20 @@ export interface FeedItemDTO {
   contentType: string;
   outbreakRelevant: boolean;
   outbreak: { slug: string; title: string } | null;
+  /** Tracked-event relevance (lib/tracked/relevance.ts): DIRECT | POSSIBLE | null. */
+  trackedLevel: string | null;
+  trackedTopics: string[];
+  materialChange: boolean;
 }
 
-export async function listFeed(asOf: Date | null, filters: OutbreakFilters & { sourceType?: string | null; includeAllTypes?: boolean } = {}, limit = 40): Promise<FeedItemDTO[]> {
+export interface FeedFilters extends OutbreakFilters {
+  sourceType?: string | null;
+  includeAllTypes?: boolean;
+  /** "only": articles directly about this tracked event; "exclude": everything not directly about a tracked event. */
+  tracked?: { mode: "only" | "exclude"; eventId?: string } | null;
+}
+
+export async function listFeed(asOf: Date | null, filters: FeedFilters = {}, limit = 40): Promise<FeedItemDTO[]> {
   const where: Prisma.SourceArticleWhereInput = {
     publishedAt: lte(asOf),
     // Guidance, podcasts, corporate and general publications are excluded unless explicitly requested.
@@ -169,6 +180,9 @@ export async function listFeed(asOf: Date | null, filters: OutbreakFilters & { s
     // Media items are not shown until accepted; rejected and duplicate items never.
     OR: [{ reviewStatus: "ACCEPTED" }, { reviewStatus: "PENDING", sourceType: "OFFICIAL" }],
     ...(filters.sourceType ? { sourceType: filters.sourceType } : {}),
+    ...(filters.tracked?.mode === "only" ? { trackedLevel: "DIRECT", ...(filters.tracked.eventId ? { trackedEventId: filters.tracked.eventId } : { trackedEventId: { not: null } }) } : {}),
+    // Nullable column: "not DIRECT" must keep the NULL rows explicitly (SQL NOT(x = 'DIRECT') drops them).
+    ...(filters.tracked?.mode === "exclude" ? { AND: [{ OR: [{ trackedLevel: null }, { trackedLevel: { not: "DIRECT" } }] }] } : {}),
   };
   const [rows, diseases] = await Promise.all([
     prisma.sourceArticle.findMany({ where, orderBy: { publishedAt: "desc" }, take: 400, include: { source: true, outbreak: { select: { slug: true, title: true, published: true, firstReportedAt: true } }, claims: { where: { claimType: "PATHOGEN_ID" }, select: { id: true } } } }),
@@ -204,6 +218,9 @@ export async function listFeed(asOf: Date | null, filters: OutbreakFilters & { s
       reviewStatus: r.reviewStatus,
       origin: r.origin,
       outbreak: outbreakVisible ? { slug: r.outbreak!.slug, title: r.outbreak!.title } : null,
+      trackedLevel: r.trackedLevel,
+      trackedTopics: safeJson<string[]>(r.trackedTopics, []),
+      materialChange: r.materialChange,
     });
     if (items.length >= limit) break;
   }
@@ -339,7 +356,10 @@ export async function getOutbreakDetail(slug: string, asOf: Date | null) {
     .map((x) => ({ id: x.id, metric: x.metric, value: x.value, valueHigh: x.valueHigh, isCumulative: x.isCumulative, deathCauseConfirmed: x.deathCauseConfirmed, scope: x.scope, asOfDate: x.asOfDate?.toISOString() ?? null, reportedAt: x.reportedAt.toISOString(), sourceType: x.sourceType, verificationStatus: verificationAt(x.verificationStatus, x.verifiedAt, asOf), attributedTo: x.attributedTo, notes: x.notes, source: articleRef(x.sourceArticleId ? articlesById.get(x.sourceArticleId) : null) }));
   const updates = o.updates.map((u) => ({ id: u.id, kind: u.kind, title: u.title, body: u.body, occurredAt: u.occurredAt?.toISOString() ?? null, publishedAt: u.publishedAt.toISOString(), sourceType: u.sourceType, verificationStatus: verificationAt(u.verificationStatus, u.verifiedAt, asOf), attributedTo: u.attributedTo, source: articleRef(u.sourceArticleId ? articlesById.get(u.sourceArticleId) : null) }));
   const chronology = [...updates].sort((a, b) => (a.occurredAt ?? a.publishedAt).localeCompare(b.occurredAt ?? b.publishedAt));
-  const claims = o.claims.map((c) => ({ id: c.id, claimType: c.claimType, text: c.text, metric: c.metric, value: c.value, attributedTo: c.attributedTo, sourceType: c.sourceType, verificationStatus: verificationAt(c.verificationStatus, c.reviewedAt, asOf), conflictNote: c.conflictNote, publishedAt: c.publishedAt.toISOString(), source: articleRef(c.article) }));
+  const claims = o.claims.map((c) => {
+    const v = claimVerdictAt(c.verificationStatus, c.reviewedAt, asOf);
+    return { id: c.id, claimType: c.claimType, text: c.text, metric: c.metric, value: c.value, attributedTo: c.attributedTo, sourceType: c.sourceType, verificationStatus: v.status, conflictNote: v.showConflict ? c.conflictNote : null, publishedAt: c.publishedAt.toISOString(), source: articleRef(c.article) };
+  });
   const series = (m: Metric) => seriesFor(o.observations, m, asOf).map((p) => ({ t: new Date(p.t).toISOString(), value: p.value }));
   return {
     notYetReported: false as const,

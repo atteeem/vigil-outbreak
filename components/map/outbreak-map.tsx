@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Map as MapLibreMap, NavigationControl, Popup, config as maplibreConfig, type GeoJSONSource, type MapLayerMouseEvent, type StyleSpecification, type ExpressionSpecification } from "maplibre-gl";
 import { loadGeography } from "./geography";
+import { markerKind, markerColor, type MarkerKind } from "./marker-style";
 import { FallbackMap } from "./fallback-map";
 import { CLASSIFICATION_HEX, CLASSIFICATION_LABEL, type Classification } from "@/lib/domain/enums";
 import { COUNTRIES } from "@/lib/geo/countries";
@@ -47,7 +48,15 @@ export interface MapMarker {
   locationName: string;
   /** Official verified confirmed cases, or null. Only this drives marker size. */
   confirmedCases: number | null;
+  /** Symbol to draw; derived from the classification when omitted (global view). */
+  kind?: MarkerKind;
+  /** Popup / accessible label for the marker's meaning (e.g. "Precautionary measure — not an infection"). */
+  label?: string;
+  /** Drawn faintly (e.g. unrelated outbreaks shown for context on the investigation map). */
+  muted?: boolean;
 }
+
+export { markerKind, markerColor, PRECAUTION_HEX, type MarkerKind } from "./marker-style";
 
 export type BasemapMode = "map" | "satellite";
 export const BASEMAP_PREF_KEY = "vigil-outbreak.basemap";
@@ -97,25 +106,27 @@ function buildStyle(): StyleSpecification {
 }
 
 const sizeExpr = ["case", ["has", "cases"], ["min", 24, ["+", 7, ["*", 3.2, ["log10", ["+", ["get", "cases"], 1]]]]], 7] as unknown as ExpressionSpecification;
-const clsColor = ["match", ["get", "classification"], ...Object.entries(CLASSIFICATION_HEX).flat(), "#8d96a5"] as unknown as ExpressionSpecification;
-const isConfirmed = ["in", ["get", "classification"], ["literal", ["CONFIRMED_LOCALIZED", "CONFIRMED_WIDESPREAD"]]] as unknown as ExpressionSpecification;
-const isInvestigation = ["in", ["get", "classification"], ["literal", ["UNCONFIRMED_INVESTIGATION", "SUSPECTED_OUTBREAK"]]] as unknown as ExpressionSpecification;
+const clsColor = ["get", "color"] as unknown as ExpressionSpecification;
+const kindIs = (k: MarkerKind) => ["==", ["get", "kind"], k] as unknown as ExpressionSpecification;
+const fade = (opacity: number) => ["case", ["==", ["get", "muted"], true], opacity * 0.35, opacity] as unknown as ExpressionSpecification;
 const notCluster = ["!", ["has", "point_count"]] as unknown as ExpressionSpecification;
 
 function addOutbreakLayers(map: MapLibreMap) {
   map.addSource("outbreaks", { type: "geojson", data: EMPTY, cluster: true, clusterRadius: 34, clusterMaxZoom: 3 });
   map.addLayer({ id: "cluster", type: "circle", source: "outbreaks", filter: ["has", "point_count"], paint: { "circle-color": "#1b232c", "circle-stroke-color": "#3fd0c9", "circle-stroke-width": 1.2, "circle-stroke-opacity": 0.6, "circle-radius": ["step", ["get", "point_count"], 13, 4, 16, 10, 20] } });
   map.addLayer({ id: "cluster-count", type: "symbol", source: "outbreaks", filter: ["has", "point_count"], layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": ["Noto Sans Medium"], "text-size": 11, "text-allow-overlap": true }, paint: { "text-color": "#e6e9ee" } });
-  map.addLayer({ id: "approx-halo", type: "circle", source: "outbreaks", filter: ["all", notCluster, ["==", ["get", "precision"], "COUNTRY"]], paint: { "circle-radius": ["+", sizeExpr, 9], "circle-color": clsColor, "circle-opacity": 0.06, "circle-stroke-color": clsColor, "circle-stroke-width": 1, "circle-stroke-opacity": 0.22 } });
-  map.addLayer({ id: "confirmed", type: "circle", source: "outbreaks", filter: ["all", notCluster, isConfirmed], paint: { "circle-radius": sizeExpr, "circle-color": clsColor, "circle-opacity": 0.82, "circle-stroke-color": "#07080a", "circle-stroke-width": 1.5 } });
-  map.addLayer({ id: "investigation", type: "circle", source: "outbreaks", filter: ["all", notCluster, isInvestigation], paint: { "circle-radius": 9, "circle-color": clsColor, "circle-opacity": 0.08, "circle-stroke-color": clsColor, "circle-stroke-width": 2 } });
-  map.addLayer({ id: "investigation-core", type: "circle", source: "outbreaks", filter: ["all", notCluster, isInvestigation], paint: { "circle-radius": 2.2, "circle-color": clsColor } });
-  map.addLayer({ id: "resolved", type: "circle", source: "outbreaks", filter: ["all", notCluster, ["==", ["get", "classification"], "RESOLVED"]], paint: { "circle-radius": 5.5, "circle-color": "#7d8794", "circle-opacity": 0.05, "circle-stroke-color": "#7d8794", "circle-stroke-width": 1.5 } });
+  map.addLayer({ id: "precaution", type: "circle", source: "outbreaks", filter: ["all", notCluster, kindIs("precaution")], paint: { "circle-radius": 15, "circle-color": clsColor, "circle-opacity": fade(0.07), "circle-stroke-color": clsColor, "circle-stroke-width": 1.5, "circle-stroke-opacity": fade(0.75) } });
+  map.addLayer({ id: "approx-halo", type: "circle", source: "outbreaks", filter: ["all", notCluster, ["==", ["get", "precision"], "COUNTRY"], ["!=", ["get", "kind"], "precaution"]], paint: { "circle-radius": ["+", sizeExpr, 9], "circle-color": clsColor, "circle-opacity": fade(0.06), "circle-stroke-color": clsColor, "circle-stroke-width": 1, "circle-stroke-opacity": fade(0.22) } });
+  map.addLayer({ id: "confirmed", type: "circle", source: "outbreaks", filter: ["all", notCluster, kindIs("confirmed")], paint: { "circle-radius": sizeExpr, "circle-color": clsColor, "circle-opacity": fade(0.82), "circle-stroke-color": "#07080a", "circle-stroke-width": 1.5 } });
+  map.addLayer({ id: "suspected", type: "circle", source: "outbreaks", filter: ["all", notCluster, kindIs("suspected")], paint: { "circle-radius": 8, "circle-color": clsColor, "circle-opacity": fade(0.08), "circle-stroke-color": clsColor, "circle-stroke-width": 2.5, "circle-stroke-opacity": fade(1) } });
+  map.addLayer({ id: "investigation", type: "circle", source: "outbreaks", filter: ["all", notCluster, kindIs("investigation")], paint: { "circle-radius": 9, "circle-color": clsColor, "circle-opacity": fade(0.08), "circle-stroke-color": clsColor, "circle-stroke-width": 2, "circle-stroke-opacity": fade(1) } });
+  map.addLayer({ id: "investigation-core", type: "circle", source: "outbreaks", filter: ["all", notCluster, kindIs("investigation")], paint: { "circle-radius": 2.2, "circle-color": clsColor, "circle-opacity": fade(1) } });
+  map.addLayer({ id: "resolved", type: "circle", source: "outbreaks", filter: ["all", notCluster, kindIs("resolved")], paint: { "circle-radius": 5.5, "circle-color": "#7d8794", "circle-opacity": fade(0.05), "circle-stroke-color": "#7d8794", "circle-stroke-width": 1.5, "circle-stroke-opacity": fade(1) } });
   map.addLayer({ id: "selected", type: "circle", source: "outbreaks", filter: ["all", notCluster, ["==", ["get", "slug"], ""]], paint: { "circle-radius": ["+", sizeExpr, 7], "circle-color": "transparent", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5, "circle-stroke-opacity": 0.9 } });
   map.addLayer({ id: "marker-labels", type: "symbol", source: "outbreaks", filter: notCluster, minzoom: 3.5, layout: { "text-field": ["get", "locationName"], "text-font": ["Noto Sans Medium"], "text-size": 11, "text-offset": [0, 1.5], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#e6e9ee", "text-halo-color": "#07080a", "text-halo-width": 1.4 } });
 }
 
-const MARKER_LAYERS = ["confirmed", "investigation", "resolved", "approx-halo"];
+const MARKER_LAYERS = ["confirmed", "suspected", "investigation", "resolved", "precaution", "approx-halo"];
 
 function toGeoJSON(markers: readonly MapMarker[]): GeoJSON.FeatureCollection {
   return {
@@ -123,7 +134,7 @@ function toGeoJSON(markers: readonly MapMarker[]): GeoJSON.FeatureCollection {
     features: markers.map((m) => ({
       type: "Feature",
       id: undefined,
-      properties: { id: m.id, slug: m.slug, title: m.title, classification: m.classification, precision: m.precision, locationName: m.locationName, ...(m.confirmedCases !== null ? { cases: m.confirmedCases } : {}) },
+      properties: { id: m.id, slug: m.slug, title: m.title, classification: m.classification, kind: markerKind(m), color: markerColor(m), muted: !!m.muted, ...(m.label ? { label: m.label } : {}), precision: m.precision, locationName: m.locationName, ...(m.confirmedCases !== null ? { cases: m.confirmedCases } : {}) },
       geometry: { type: "Point", coordinates: [m.lng, m.lat] },
     })),
   };
@@ -132,24 +143,34 @@ function toGeoJSON(markers: readonly MapMarker[]): GeoJSON.FeatureCollection {
 export function OutbreakMap({
   markers,
   selectedSlug,
+  selectedId,
   onSelect,
+  onSelectMarker,
   initialView = { center: [40, 25], zoom: 1.3 },
   focus,
   className,
   showLegend = true,
+  legend,
 }: {
   markers: readonly MapMarker[];
   selectedSlug?: string | null;
+  /** Select a single marker (investigation map: one marker per location of the same outbreak). */
+  selectedId?: string | null;
   onSelect?: (slug: string) => void;
+  /** When set, clicks report the marker id instead of the outbreak slug. */
+  onSelectMarker?: (id: string) => void;
   initialView?: { center: [number, number]; zoom: number };
   /** When this changes, the camera flies to it. */
   focus?: { lng: number; lat: number; zoom: number; key: string } | null;
   className?: string;
   showLegend?: boolean;
+  /** Replaces the default classification legend (the investigation map explains location roles instead). */
+  legend?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const onSelectRef = useRef(onSelect);
+  const onSelectMarkerRef = useRef(onSelectMarker);
   const [ready, setReady] = useState(false);
   const [mode, setMode] = useState<BasemapMode>("map");
   const [geoError, setGeoError] = useState<string | null>(null);
@@ -159,7 +180,8 @@ export function OutbreakMap({
 
   useEffect(() => {
     onSelectRef.current = onSelect;
-  }, [onSelect]);
+    onSelectMarkerRef.current = onSelectMarker;
+  }, [onSelect, onSelectMarker]);
 
   useEffect(() => {
     try {
@@ -237,7 +259,7 @@ export function OutbreakMap({
         title.textContent = p.title ?? "";
         const meta = document.createElement("div");
         meta.className = "mt-0.5 text-[11px] text-ink-dim";
-        meta.textContent = `${CLASSIFICATION_LABEL[p.classification as Classification] ?? p.classification} · ${p.locationName}${p.precision === "COUNTRY" ? " (country-level location)" : ""}`;
+        meta.textContent = `${p.label ?? CLASSIFICATION_LABEL[p.classification as Classification] ?? p.classification} · ${p.locationName}${p.precision === "COUNTRY" ? " (country-level location)" : ""}`;
         el.append(title, meta);
         popup.setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number]).setDOMContent(el).addTo(map);
       });
@@ -246,8 +268,9 @@ export function OutbreakMap({
         popup.remove();
       });
       map.on("click", layer, (e: MapLayerMouseEvent) => {
-        const slug = (e.features?.[0]?.properties as { slug?: string } | undefined)?.slug;
-        if (slug) onSelectRef.current?.(slug);
+        const props = e.features?.[0]?.properties as { slug?: string; id?: string } | undefined;
+        if (onSelectMarkerRef.current && props?.id) onSelectMarkerRef.current(props.id);
+        else if (props?.slug) onSelectRef.current?.(props.slug);
       });
     }
     map.on("click", "cluster", async (e: MapLayerMouseEvent) => {
@@ -283,8 +306,8 @@ export function OutbreakMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    map.setFilter("selected", ["all", notCluster, ["==", ["get", "slug"], selectedSlug ?? ""]]);
-  }, [selectedSlug, ready]);
+    map.setFilter("selected", ["all", notCluster, selectedId ? ["==", ["get", "id"], selectedId] : ["==", ["get", "slug"], selectedSlug ?? ""]]);
+  }, [selectedSlug, selectedId, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -317,9 +340,9 @@ export function OutbreakMap({
     return (
       <div className={cn("relative overflow-hidden bg-[#080b0f]", className)}>
         <div ref={containerRef} className="h-full w-full" data-testid="outbreak-map" data-ready="true" data-renderer="svg" data-marker-count={markers.length} role="region" aria-label="World map of outbreaks and investigations">
-          <FallbackMap markers={markers} selectedSlug={selectedSlug} onSelect={onSelect} reason={engineError} view={initialView} />
+          <FallbackMap markers={markers} selectedSlug={selectedSlug} selectedId={selectedId} onSelect={onSelect} onSelectMarker={onSelectMarker} reason={engineError} view={initialView} />
         </div>
-        {showLegend && <MapLegend />}
+        {showLegend && (legend ?? <MapLegend />)}
       </div>
     );
   }
@@ -340,15 +363,15 @@ export function OutbreakMap({
           {geoError ? `Basemap geometry failed to load (${geoError}). Markers remain accurate.` : "Satellite imagery could not be loaded (network or provider unavailable)."}
         </div>
       )}
-      {showLegend && <MapLegend />}
+      {showLegend && (legend ?? <MapLegend />)}
     </div>
   );
 }
 
 export function MapLegend() {
-  const items: { cls: Classification; shape: "ring" | "disc" | "small" }[] = [
+  const items: { cls: Classification; shape: "ring" | "thick" | "disc" | "small" }[] = [
     { cls: "UNCONFIRMED_INVESTIGATION", shape: "ring" },
-    { cls: "SUSPECTED_OUTBREAK", shape: "ring" },
+    { cls: "SUSPECTED_OUTBREAK", shape: "thick" },
     { cls: "CONFIRMED_LOCALIZED", shape: "disc" },
     { cls: "CONFIRMED_WIDESPREAD", shape: "disc" },
     { cls: "RESOLVED", shape: "small" },
@@ -361,7 +384,7 @@ export function MapLegend() {
           return (
             <li key={cls} className="flex items-center gap-2 text-ink-dim">
               <span className="flex h-3.5 w-3.5 items-center justify-center">
-                {shape === "disc" ? <span className="h-3 w-3 rounded-full" style={{ background: hex }} /> : shape === "ring" ? <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ boxShadow: `inset 0 0 0 2px ${hex}` }}><span className="h-1 w-1 rounded-full" style={{ background: hex }} /></span> : <span className="h-2.5 w-2.5 rounded-full" style={{ boxShadow: `inset 0 0 0 1.5px ${hex}` }} />}
+                {shape === "disc" ? <span className="h-3 w-3 rounded-full" style={{ background: hex }} /> : shape === "thick" ? <span className="h-3 w-3 rounded-full" style={{ boxShadow: `inset 0 0 0 2.5px ${hex}` }} /> : shape === "ring" ? <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ boxShadow: `inset 0 0 0 2px ${hex}` }}><span className="h-1 w-1 rounded-full" style={{ background: hex }} /></span> : <span className="h-2.5 w-2.5 rounded-full" style={{ boxShadow: `inset 0 0 0 1.5px ${hex}` }} />}
               </span>
               {CLASSIFICATION_LABEL[cls]}
             </li>

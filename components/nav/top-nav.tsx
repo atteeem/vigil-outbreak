@@ -8,10 +8,11 @@ import { cn, relative } from "@/lib/utils";
 import { ClassificationDot } from "@/components/ui/badges";
 
 const LINKS = [
-  { href: "/", label: "Overview" },
+  { href: "/", label: "Investigation" },
   { href: "/map", label: "Live Map" },
-  { href: "/outbreaks", label: "Outbreaks" },
+  { href: "/timeline", label: "Timeline" },
   { href: "/intelligence", label: "Intelligence" },
+  { href: "/global", label: "Global watch" },
   { href: "/analytics", label: "Analytics" },
 ];
 
@@ -206,7 +207,7 @@ export function TopNav() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  const active = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const active = (href: string) => (href === "/" ? pathname === "/" : href === "/global" ? pathname.startsWith("/global") || pathname === "/outbreaks" : pathname.startsWith(href));
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur-md">
       <div className="mx-auto flex h-12 max-w-[1920px] items-center gap-2 px-2 sm:gap-3 sm:px-4">

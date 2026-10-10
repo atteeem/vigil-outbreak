@@ -81,6 +81,22 @@ Reproduced with Playwright against a populated database (desktop 1600×1000 and 
 - [ ] Re-test on the owner's Windows PC (real browser and GPU, real WHO/ECDC network)
 - [ ] No UI to add a new source row (the 11 verified ECDC feeds must be pasted into the existing ECDC rows); decide whether to add one
 
+## Milestone: Focus on the Irkutsk investigation (2026-10-10)
+Product direction corrected: a dedicated tracker for one emerging event and its possible spread; general outbreak
+news is secondary.
+- [x] `TrackedEvent` model (match terms, origin region, map view, primary); migration registers the existing Irkutsk record; admin can track another outbreak later
+- [x] Main dashboard `/`: status, pathogen statement (plague = bacterium, not confirmed), last verified update, wider-spread assessment, figures with explicit state + source + timestamps, last 24 hours, developments, pathogen claims / lab findings / alternative accounts kept apart, contradictions, risk, targeted intelligence; `?asOf=` history
+- [x] Live Map `/map`: Irkutsk/Shelekhov first; verified locations only; roles (investigation site, suspected, confirmed, precautionary measure — never an infection); unverified listed, not drawn; unrelated outbreaks off by default; satellite, playback and no-WebGL fallback preserved
+- [x] Timeline `/timeline`: occurred vs reported dates, categories, corrections in place, "what was known then"
+- [x] Intelligence: investigation section (default, topic filters) vs other infectious-disease news; global overview moved to Global watch (`/global`)
+- [x] Automation: relevance matcher (place + context; Cyrillic; wider-area = review only), topics, material-change flag, priority review queue, "Add to investigation timeline"; nothing published automatically
+- [x] Spread requires evidence: case locations outside the origin start unverified; verification refused without evidence
+- [x] Historical integrity fix: claim disputes / conflict notes no longer shown before they were known
+- [x] Rospotrebnadzor source added (disabled until its feed URL is confirmed)
+- [x] Tests: 159 Vitest (SQLite and PostgreSQL), 47 Playwright (desktop + mobile), typecheck, lint, build; SQLite and PostgreSQL upgrade paths rehearsed on existing data
+- [ ] Confirm the Rospotrebnadzor RSS URL and enable it; consider Russian regional sources (Irkutsk Oblast health ministry)
+- [ ] Analyst: re-verify seeded Irkutsk facts against primary publications
+
 ## Next
 - [ ] Re-verify seeded facts against the original WHO/ECDC/Reuters pages once network access is available
 - [ ] Manual article entry form in admin (articles currently arrive via ingestion or seed)

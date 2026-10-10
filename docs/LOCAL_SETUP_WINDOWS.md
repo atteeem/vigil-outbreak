@@ -270,7 +270,22 @@ git status --short                          # dev.db / .env never appear here: t
 # 4. Update only what changed (no full reinstall).
 npm install                                 # also runs: prisma generate + MapLibre worker sync
 npx prisma migrate deploy                   # applies new migrations only; never deletes rows
+npm run db:reference                        # non-destructive: reference data + tracked-investigation setup
 ```
+
+**The Irkutsk-tracker update (migration `20261010090000_tracked_event`)** adds columns and one table; it changes
+no dependencies. On your database, `migrate deploy` makes the existing `russia-irkutsk-2026` record the primary
+tracked event, and keeps your existing locations as verified. It also tags the articles already linked to it.
+`db:reference` then makes these additions:
+
+- the "Irkutsk (contacts under observation)" precautionary location;
+- a disabled *Rospotrebnadzor — news (RSS)* source (paste its feed URL in `/admin`, then Save, Test endpoint,
+  Enable);
+- dates for the seeded contradictions, so historical views only show them from when they became known;
+- tags for any other articles about the investigation.
+
+Nothing is deleted, and nothing you edited is overwritten. Afterwards `/` is the investigation dashboard; the
+previous overview is at `/global`.
 
 Then check that the SQLite binding loads and your data is still there. Both commands are read-only:
 

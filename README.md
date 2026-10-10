@@ -1,17 +1,23 @@
-# VIGIL OUTBREAK — Global Infectious Disease Intelligence
+# VIGIL OUTBREAK — Irkutsk investigation tracker
 
-An evidence-based monitoring platform for outbreaks, emerging pathogens, unexplained illnesses and official
-public-health investigations. Architecture follows [VIGIL](https://github.com/atteeem/vigil) (Next.js App Router,
-Prisma 7 driver adapters, MapLibre, HMAC admin gate), as an independent codebase with no dependency on it.
-SQLite for local development, PostgreSQL for production; ingestion runs in a separate worker or cron job.
+A dedicated intelligence dashboard for **one emerging public-health event and any subsequent spread**: the
+October 2026 investigation into the death of a laboratory worker from the Irkutsk Anti-Plague Research Institute
+(`/outbreaks/russia-irkutsk-2026`). Think of an early tracker for the first Wuhan cases rather than a general
+infectious-disease news site. Unrelated outbreaks and news are kept in secondary sections (**Global watch**,
+**Intelligence → Other news**).
+
+**Scientific status as recorded:** the death from pneumonia of unknown origin is documented. **No pathogen has
+been laboratory-confirmed.** Plague (*Yersinia pestis* — a bacterium, not a virus) is under consideration only.
+The record is an **unconfirmed investigation**; the death is not a confirmed plague death.
+
+Architecture follows [VIGIL](https://github.com/atteeem/vigil) (Next.js App Router, Prisma 7 driver adapters,
+MapLibre, HMAC admin gate), as an independent codebase with no dependency on it. SQLite for local development,
+PostgreSQL for production; ingestion runs inline in development and in a worker or cron job in production. The
+tracked subject is data (`TrackedEvent`), so another specific emerging outbreak can be tracked later from the admin.
 
 **Windows:** step-by-step PowerShell instructions are in [`docs/LOCAL_SETUP_WINDOWS.md`](docs/LOCAL_SETUP_WINDOWS.md).
 **Deployment readiness:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). **Live-source checks:**
 [`docs/LIVE_SOURCE_VERIFICATION.md`](docs/LIVE_SOURCE_VERIFICATION.md).
-
-**Featured record:** `/outbreaks/russia-irkutsk-2026`. This is a fatal pneumonia of undetermined cause in an Irkutsk
-anti-plague institute worker. It is classified as an **unconfirmed investigation**. Plague (*Yersinia pestis*, a
-bacterium) is listed as *suspected, not confirmed*. The death is confirmed, but it is **not** a confirmed plague death.
 
 ## Quick start
 
@@ -19,7 +25,7 @@ bacterium) is listed as *suspected, not confirmed*. The death is confirmed, but 
 cp .env.example .env              # set ADMIN_PASSWORD and ADMIN_SESSION_SECRET
 npm install                       # runs prisma generate
 npx prisma migrate deploy         # creates prisma/dev.db
-npm run db:seed                   # diseases, sources, sourced outbreak records
+npm run db:seed                   # diseases, sources, sourced records, tracked investigation
 npm run dev                       # http://localhost:3000  (admin: /admin)
 ```
 
@@ -31,7 +37,7 @@ or later.
 | `npm run ingest` / `npm run ingest -- --due` | One-shot ingestion of all enabled sources, or only those due (cron-friendly; exit code 2 if a source failed) |
 | `npm run ingest:backfill` | Same, following up to 4 upstream pages per source |
 | `npm run verify:sources` | **Full-pipeline** check of WHO, CDC Content Services and ECDC's officially listed feeds. A source counts as verified only if real records are retrieved, parsed, stored, have dates/geography/disease extracted and deduplicate on a second run. Uses a throwaway DB. Exit 0 = all verified, 2 = blocked by network. See `docs/LIVE_SOURCE_VERIFICATION.md` |
-| `npm run db:reference` | Non-destructive refresh of the disease reference list (names, agents, extractor keywords). Touches nothing else |
+| `npm run db:reference` | Non-destructive refresh: disease reference list, plus the tracked-event setup (Irkutsk investigation as primary subject, its precautionary location, the Rospotrebnadzor source, tracked-article tags, dates of seeded verdicts). Never deletes or overwrites analyst data |
 | `npm run reprocess` / `-- --apply` | Re-derive event location, mentioned countries, diseases and content type for ingested articles with the current rules (dry run by default; never deletes; never changes review/verification/analyst links/claims) |
 | `npm run worker` | Standalone ingestion worker (production): polls due sources, writes a heartbeat, stops gracefully |
 | `npm run db:deploy` / `npm run db:check` | Apply migrations / verify migrations reproduce the schema and the DB has no drift |
@@ -51,24 +57,65 @@ tests and an app/worker smoke test were run on PostgreSQL 16 in the build enviro
 
 ## Pages
 
-- **Overview `/`**: the KPI strip (investigations, confirmed active outbreaks, new reports in 24h, countries,
-  last successful refresh) and the world map. The left column has filters, the outbreak list and verified
-  developments. The right column shows the selected event. Below are playback controls, the intelligence feed and
-  reporting volume.
-- **Live Map `/map`**: a map-first version of the same workspace.
-- **Outbreaks `/outbreaks`** and **`/outbreaks/[slug]`**: searchable listing and full records. A record has its
-  chronology, confirmed facts, unverified reports, contradictions with provenance, official statements,
-  measures, observations table, classification history, regional map, WHO/ECDC risk assessments and sources.
-  Add `?asOf=` to see the record as it was known at that time.
-- **Intelligence `/intelligence`**: the ingested publication feed. Each item shows its headline, country,
-  pathogen or "unknown cause", time, source, summary, verification and linked outbreak.
-- **Analytics `/analytics`**: confirmed and suspected cases, deaths, status, categories, geography and reporting
-  history. A chart is drawn only when compatible observations exist; otherwise it shows an explanatory empty state.
-- **Settings `/settings`**: time zone (UTC or local), default basemap, motion, and live source freshness.
-- **Admin `/admin`** (password): sources with Test / Fetch Now / enable / URL / interval, Fetch Now for all
-  sources, ingestion logs, incoming review (accept, link, reject, verify, promote a claim to an observation),
-  outbreak create and edit, publish and unpublish, reclassification, observations, updates and corrections,
-  merge, and audit history.
+- **Investigation `/`** (main dashboard): the tracked investigation at a glance.
+  - Status, pathogen status, a plain pathogen statement, the last verified update, and the time the current status
+    took effect.
+  - **Wider spread**: whether verified case locations exist outside Irkutsk Oblast.
+  - Key figures: laboratory-confirmed cases, suspected cases, deaths (with whether the cause is
+    laboratory-confirmed), contacts under observation, hospitalised, and contacts tested negative. Each figure has a
+    state (*verified official*, *unverified report*, *disputed* or *unknown*), a source link and timestamps.
+  - What changed in the last 24 hours, and the major developments.
+  - A focused map, and targeted intelligence (the possible pathogen, laboratory results, contacts, transmission and
+    spread first).
+  - Three separate panels: claims about the pathogen, laboratory findings, and alternative or unverified accounts.
+  - Contradictions and risk assessments.
+  - `?asOf=` shows what was known at a past time.
+- **Live Map `/map`**: starts on Irkutsk / Shelekhov.
+  - Only analyst-verified locations are drawn, each symbolised by its role: investigation site, suspected case,
+    laboratory-confirmed case, or precautionary measure. A precautionary measure (quarantine or observation) is
+    never shown as an infection.
+  - Unverified locations are listed beside the map but not drawn.
+  - The view widens to the world when verified case locations exist elsewhere.
+  - Unrelated outbreaks are off by default and shown faded on request.
+  - Normal and satellite modes, playback, and the no-WebGL fallback all still work.
+- **Timeline `/timeline`**: the chronology from the first reports.
+  - Covers deaths, symptoms, testing, quarantines, official statements, corrections, new evidence and status
+    changes.
+  - Every entry shows when it **occurred** and when it was **reported**.
+  - Entries can be filtered by category.
+  - "What was known then" opens the state of knowledge right after any entry.
+- **Intelligence `/intelligence`**: three sections.
+  - The investigation (default): reports identified as being about it, with topic filters.
+  - **Other infectious disease news**: everything else.
+  - **Everything**.
+- **Global watch `/global`, `/global/map`, `/outbreaks`** (secondary): all published outbreak records worldwide,
+  with the KPI strip, filters and playback. **`/outbreaks/[slug]`** is the full sourced record.
+- **Analytics `/analytics`**, **Settings `/settings`**: unchanged.
+- **Admin `/admin`** (password):
+  - Sources, logs and audit.
+  - A review queue that lists possible material changes about the investigation first. From it an analyst can
+    accept, link, reject, verify, promote a claim, or **Add to investigation timeline**.
+  - The outbreak editor: locations with role, verification and evidence; timeline category; tracked-event
+    settings (match terms, origin region, map view, primary).
+
+## The tracked investigation (how automation is bounded)
+
+- **Identifying relevant reports** (`lib/tracked/relevance.ts`):
+  - **DIRECT**: an article names the event's places (Irkutsk, Shelekhov, the anti-plague institute, including in
+    Cyrillic) **and** event-specific context (plague, pneumonia, contacts, Rospotrebnadzor, …).
+  - A place name alone, such as Irkutsk weather, is not enough, and neither is plague elsewhere.
+  - Wider-area terms, such as "Siberia" + plague, only make an article **POSSIBLE**. Those go to review and never
+    appear on the dashboard.
+- **Material changes**: direct reports about the pathogen, laboratory results, transmission, spread, deaths, cases
+  or corrections are flagged and queued first for analyst review. **Nothing is published automatically.**
+  Ingestion never creates timeline entries, figures, locations or status changes. An analyst adds an entry to the
+  timeline from the review queue, and it stays unverified unless they verify it.
+- **Spread needs evidence**: countries merely mentioned are never mapped. A report located in another country is
+  flagged *Spread — needs evidence*. A case location outside the origin starts **unverified**: it is listed but not
+  mapped or counted. The server refuses to verify it without evidence (a source article or an evidence note).
+- **No derived statistics**: no transmission rates, fatality ratios or projections are calculated.
+- **History**: playback hides publications, figures, locations and verdicts (including disputes and conflict notes)
+  that were not yet known at the selected time.
 
 ## Data integrity rules (enforced in `lib/domain/stats.ts`, tested)
 

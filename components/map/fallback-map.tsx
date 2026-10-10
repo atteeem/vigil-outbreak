@@ -5,9 +5,10 @@
 // marker semantics and click-to-select; no pan/zoom, satellite or clustering.
 
 import { useEffect, useMemo, useState } from "react";
-import { CLASSIFICATION_HEX, CLASSIFICATION_LABEL, type Classification, isConfirmedActive, isInvestigation } from "@/lib/domain/enums";
+import { CLASSIFICATION_LABEL, type Classification } from "@/lib/domain/enums";
 import { CITIES } from "@/lib/geo/cities";
 import { loadGeography, type Geography } from "./geography";
+import { markerColor, markerKind } from "./marker-style";
 import type { MapMarker } from "./outbreak-map";
 
 const W = 1000;
@@ -42,13 +43,17 @@ const radius = (cases: number | null) => (cases === null ? 7 : Math.min(24, 7 + 
 export function FallbackMap({
   markers,
   selectedSlug,
+  selectedId,
   onSelect,
+  onSelectMarker,
   reason,
   view,
 }: {
   markers: readonly MapMarker[];
   selectedSlug?: string | null;
+  selectedId?: string | null;
   onSelect?: (slug: string) => void;
+  onSelectMarker?: (id: string) => void;
   reason: string;
   view?: { center: [number, number]; zoom: number };
 }) {
@@ -95,32 +100,41 @@ export function FallbackMap({
         </g>
         {markers.map((m) => {
           const cls = m.classification as Classification;
-          const hex = CLASSIFICATION_HEX[cls] ?? "#8d96a5";
+          const hex = markerColor(m);
+          const kind = markerKind(m);
+          const op = m.muted ? 0.35 : 1;
+          const choose = () => (onSelectMarker ? onSelectMarker(m.id) : onSelect?.(m.slug));
           const cx = x(m.lng);
           const cy = y(m.lat);
           const r = radius(m.confirmedCases) * k;
-          const label = `${m.title} — ${CLASSIFICATION_LABEL[cls] ?? m.classification} · ${m.locationName}${m.precision === "COUNTRY" ? " (country-level location)" : ""}`;
+          const label = `${m.title} — ${m.label ?? CLASSIFICATION_LABEL[cls] ?? m.classification} · ${m.locationName}${m.precision === "COUNTRY" ? " (country-level location)" : ""}`;
           return (
             <g
               key={m.id}
               role="button"
               tabIndex={0}
               aria-label={label}
-              data-testid={`fallback-marker-${m.slug}`}
+              data-testid={onSelectMarker ? `fallback-marker-${m.id}` : `fallback-marker-${m.slug}`}
+              data-kind={kind}
               className="cursor-pointer outline-none"
-              onClick={() => onSelect?.(m.slug)}
+              opacity={op}
+              onClick={choose}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  onSelect?.(m.slug);
+                  choose();
                 }
               }}
             >
               <title>{label}</title>
-              {m.precision === "COUNTRY" && <circle cx={cx} cy={cy} r={r + 9 * k} fill={hex} fillOpacity={0.06} stroke={hex} strokeOpacity={0.22} strokeWidth={k} />}
-              {isConfirmedActive(cls) ? (
+              {m.precision === "COUNTRY" && kind !== "precaution" && <circle cx={cx} cy={cy} r={r + 9 * k} fill={hex} fillOpacity={0.06} stroke={hex} strokeOpacity={0.22} strokeWidth={k} />}
+              {kind === "precaution" ? (
+                <circle cx={cx} cy={cy} r={15 * k} fill={hex} fillOpacity={0.07} stroke={hex} strokeOpacity={0.75} strokeWidth={1.5 * k} />
+              ) : kind === "confirmed" ? (
                 <circle cx={cx} cy={cy} r={r} fill={hex} fillOpacity={0.82} stroke="#07080a" strokeWidth={1.5 * k} />
-              ) : isInvestigation(cls) ? (
+              ) : kind === "suspected" ? (
+                <circle cx={cx} cy={cy} r={8 * k} fill={hex} fillOpacity={0.08} stroke={hex} strokeWidth={2.5 * k} />
+              ) : kind === "investigation" ? (
                 <>
                   <circle cx={cx} cy={cy} r={9 * k} fill={hex} fillOpacity={0.08} stroke={hex} strokeWidth={2 * k} />
                   <circle cx={cx} cy={cy} r={2.2 * k} fill={hex} />
@@ -128,7 +142,7 @@ export function FallbackMap({
               ) : (
                 <circle cx={cx} cy={cy} r={5.5 * k} fill="#7d8794" fillOpacity={0.05} stroke="#7d8794" strokeWidth={1.5 * k} />
               )}
-              {m.slug === selectedSlug && <circle cx={cx} cy={cy} r={r + 7 * k} fill="none" stroke="#ffffff" strokeOpacity={0.9} strokeWidth={1.5 * k} />}
+              {(selectedId ? m.id === selectedId : m.slug === selectedSlug) && <circle cx={cx} cy={cy} r={r + 7 * k} fill="none" stroke="#ffffff" strokeOpacity={0.9} strokeWidth={1.5 * k} />}
             </g>
           );
         })}
